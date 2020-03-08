@@ -1,2 +1,2 @@
-add_executable(capsaicin main.cpp)
-target_link_libraries(capsaicin PRIVATE project_options project_warnings)
+add_subdirectory(core)
+add_subdirectory(viewer)
