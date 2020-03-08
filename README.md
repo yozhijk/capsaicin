@@ -1,0 +1,2 @@
+# capsaicin
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/5c336832dfb34310a2371b1c77d72711)](https://app.codacy.com/manual/yozhijk/capsaicin?utm_source=github.com&utm_medium=referral&utm_content=yozhijk/capsaicin&utm_campaign=Badge_Grade_Dashboard)
