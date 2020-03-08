@@ -2,8 +2,4 @@
 
 using namespace std;
 
-int foo()
-{
-    std::cout << "Hello, world!\n";
-    return 0;
-}
+int foo() { return 0; }
