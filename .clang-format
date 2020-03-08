@@ -19,8 +19,8 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 AlignTrailingComments: true
 AllowShortBlocksOnASingleLine: true
-AlignConsecutiveDeclarations: true
-AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
 AllowAllParametersOfDeclarationOnNextLine: false
 BinPackArguments: false
 BinPackParameters: false
