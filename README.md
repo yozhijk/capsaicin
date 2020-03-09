@@ -8,9 +8,9 @@ Experimental game rendering engine fully based on ray tracing / path tracing.
 ## System requirements
 ### Windows
 
--  CMake 13.2 or later
--  Visual Studio 2019 or later
--  DirectX 12
+- CMake 13.2 or later
+- Visual Studio 2019 or later
+- DirectX 12
 
 ### OSX
 
