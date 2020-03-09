@@ -3,6 +3,15 @@
 #include <cstdint>
 #include <string>
 
+// Backend specific stuff
+#ifdef WIN32
+#include <Windows.h>
+struct RenderSessionParams
+{
+    HWND hwnd;
+};
+#endif
+
 using std::uint32_t;
 
 namespace capsaicin
@@ -28,11 +37,12 @@ struct InputState
 };
 
 void Init();
+void InitRenderSession(void* params);
 void LoadSceneFromOBJ(const std::string& file_name);
-void SetSurface(uint32_t width, uint32_t height);
 void SetInputState(const InputState& input);
 void Update(float time_ms);
 void Render();
 void SetOption();
+void ShutdownRenderSession();
 void Shutdown();
 }  // namespace capsaicin
