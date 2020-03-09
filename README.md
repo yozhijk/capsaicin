@@ -25,7 +25,7 @@ Experimental game rendering engine fully based on ray tracing / path tracing.
 
 Build process relies on vcpkg on Windows to fulfill neccessary dependencies.
 
-## Clone and install vcpkg
+Clone and install vcpkg:
 
 ```sh
 mkdir vcpkg
@@ -34,14 +34,14 @@ cd vcpkg
 .\bootstrap-vcpkg.bat
 ```
 
-## Install dependencies with vcpkg
+Install dependencies with vcpkg:
 
 ```sh
 vcpkg install --triplet x64-windows spdlog
 cd ..
 ```
 
-## Clone and build capsaicin 
+Clone and build capsaicin:
 
 ```sh
 git clone --recursive https://github.com/yozhijk/capsaicin.git capsaicin
