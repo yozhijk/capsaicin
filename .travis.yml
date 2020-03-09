@@ -15,7 +15,11 @@ matrix:
       compiler: g++
 
 before_install:
-  - sudo apt-get -y install libspdlog-dev
+  - sudo apt-get -y install git
+  - mkdir spdlog
+  - git clone https://github.com/gabime/spdlog.git spdlog
+  - cd spdlog && mkdir build && cd build
+  - cmake .. && make -j4 && make install
   - eval "${MATRIX_EVAL}"
 
 before_script:
