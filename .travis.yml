@@ -19,7 +19,8 @@ before_install:
   - mkdir spdlog
   - git clone https://github.com/gabime/spdlog.git spdlog
   - cd spdlog && mkdir build && cd build
-  - cmake .. && make -j4 && make install
+  - cmake .. && make -j4
+  - sudo make install && cd ..
   - eval "${MATRIX_EVAL}"
 
 before_script:
