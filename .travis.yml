@@ -28,4 +28,4 @@ before_script:
   - cd build
   - cmake ..
 
-script: make -j4 && ./tests/tests
+script: make -j4
