@@ -49,7 +49,7 @@ int main()
 
         HWND hwnd = CreateWindowEx(0,
                                    kWindowClassName,
-                                   "BaikalRT test",
+                                   "Capsaicin test",
                                    WS_OVERLAPPEDWINDOW,
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
