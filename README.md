@@ -11,6 +11,7 @@ Experimental game rendering engine fully based on ray tracing / path tracing.
 - CMake 13.2 or later
 - Visual Studio 2019 or later
 - DirectX 12
+- vcpkg
 
 ### OSX
 
@@ -20,11 +21,32 @@ Experimental game rendering engine fully based on ray tracing / path tracing.
 
 - Not supported yet
 
-## Build steps
+## Build steps (Windows)
+
+Build process relies on vcpkg on Windows to fulfill neccessary dependencies.
+
+## Clone and install vcpkg
+
+```sh
+mkdir vcpkg
+git clone --recursive https://github.com/microsoft/vcpkg.git vcpkg
+cd vcpkg
+.\bootstrap-vcpkg.bat
+```
+
+## Install dependencies with vcpkg
+
+```sh
+vcpkg install --triplet x64-windows spdlog
+cd ..
+```
+
+## Clone and build capsaicin 
+
 ```sh
 git clone --recursive https://github.com/yozhijk/capsaicin.git capsaicin
 mkdir build
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake
 cd build
 make -j4
 ```
