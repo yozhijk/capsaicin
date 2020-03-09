@@ -3,11 +3,12 @@
 #include "capsaicin.h"
 
 using namespace std;
+using namespace capsaicin;
 
 int main()
 {
+    Init();
     std::cout << "Hello, world!\n";
-    auto answer = foo();
-    std::cout << "Answer: " << answer << "\n";
+    Shutdown();
     return 0;
 }
