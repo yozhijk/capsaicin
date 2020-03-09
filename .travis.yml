@@ -15,6 +15,7 @@ matrix:
       compiler: g++
 
 before_install:
+  - sudo apt-get -y install libspdlog-dev
   - eval "${MATRIX_EVAL}"
 
 before_script:
