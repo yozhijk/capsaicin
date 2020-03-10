@@ -129,8 +129,6 @@ void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)
 #endif
 
     // Now try to find the adapter.
-    UINT selected_id = UINT_MAX;
-
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT id = 0; DXGI_ERROR_NOT_FOUND != dxgi_factory_->EnumAdapters1(id, &adapter); ++id)
     {
@@ -158,7 +156,6 @@ void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)
         ComPtr<ID3D12Device> test_device;
         if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), feature_level, IID_PPV_ARGS(&test_device))))
         {
-            selected_id = id;
             info("Adapter selected: {}", adapter_name);
             break;
         }
