@@ -1,12 +1,6 @@
 #include "capsaicin.h"
 
-#include <iostream>
-
-#include "spdlog/sinks/basic_file_sink.h"
-#include "spdlog/spdlog.h"
-
-using namespace std;
-using namespace spdlog;
+#include "src/common.h"
 
 namespace capsaicin
 {

@@ -1,6 +1,7 @@
 find_package(spdlog REQUIRED)
 
-add_library(core src/capsaicin.cpp)
+add_library(core src/capsaicin.cpp
+                 src/dx12/dx12.cpp)
 
 target_include_directories(core
     INTERFACE
