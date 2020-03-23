@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -8,10 +9,10 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <atomic>
 
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
+#include "yecs.h"
 
 using namespace spdlog;
 
