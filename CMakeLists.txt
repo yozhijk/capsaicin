@@ -58,7 +58,3 @@ if(ENABLE_FUZZING)
 endif()
 
 add_subdirectory(src)
-
-set(ENABLE_TESTING OFF CACHE BOOL "Disable test generation for yecs" FORCE)
-
-add_subdirectory(third_party/yecs)

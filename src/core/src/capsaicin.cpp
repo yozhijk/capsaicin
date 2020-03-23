@@ -1,7 +1,6 @@
 #include "capsaicin.h"
 
 #include "src/common.h"
-#include "src/dx12/shader_compiler.h"
 
 namespace capsaicin
 {
