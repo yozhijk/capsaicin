@@ -2,7 +2,10 @@ find_package(spdlog REQUIRED)
 
 add_library(core src/capsaicin.cpp
                  src/dx12/dx12.cpp
-                 src/dx12/shader_compiler.cpp)
+                 src/dx12/shader_compiler.cpp
+                 src/utils/singleton.h
+                 src/systems/render_system.h
+                 src/systems/render_system.cpp)
 
 target_include_directories(core
     INTERFACE
@@ -25,4 +28,4 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/third_party/dxc/dxil.dll
         "\$\(OutDir\)/dxil.dll")
 
-target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib)
+target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid)

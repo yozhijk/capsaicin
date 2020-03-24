@@ -14,12 +14,9 @@ LRESULT __stdcall WndProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg)
     {
-    //case WM_PAINT:
-        //if (g_render_session)
-        //{
-            //Test_RunSystems();
-        //}
-        // return 0;
+    case WM_PAINT:
+        Render();
+        return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;

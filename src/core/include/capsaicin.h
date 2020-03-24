@@ -5,6 +5,7 @@
 
 // Backend specific stuff
 #ifdef WIN32
+#define NOMINMAX
 #include <Windows.h>
 struct RenderSessionParams
 {
