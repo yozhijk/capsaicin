@@ -2,6 +2,7 @@
 
 #include "tiny_obj_loader.h"
 
+
 using namespace tinyobj;
 using namespace std;
 
@@ -50,7 +51,7 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
 
     if (!ret)
     {
-        error("Couldn't load {}", asset.file_name);
+        error("AssetLoadSystem: Couldn't load {}", asset.file_name);
         throw std::runtime_error("Couldn't load {}" + asset.file_name);
     }
 
@@ -141,8 +142,10 @@ void CreateGPUBuffers(const MeshData& mesh_data, MeshComponent& mesh_component)
         mesh_component.vertices.Get(), 0, vertex_upload_buffer.Get(), 0, mesh_data.positions.size() * sizeof(float));
     command_list->CopyBufferRegion(
         mesh_component.indices.Get(), 0, index_upload_buffer.Get(), 0, mesh_data.indices.size() * sizeof(uint32_t));
+
     // Transition to UAV.
     command_list->ResourceBarrier(2, &copy_dest_to_uav[0]);
+
     command_list->Close();
 
     // Execute command list synchronously.
@@ -176,12 +179,12 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         auto& asset = world().GetComponent<AssetComponent>(e);
         auto& gpu_mesh = world().AddComponent<MeshComponent>(e);
 
-        info("Loading {}", asset.file_name);
+        info("AssetLoadSystem: Loading {}", asset.file_name);
 
         MeshData mesh_data;
         LoadObjFile(asset, mesh_data);
 
-        info("Allocating GPU buffers for {}", asset.file_name);
+        info("AssetLoadSystem: Allocating GPU buffers for {}", asset.file_name);
         CreateGPUBuffers(mesh_data, gpu_mesh);
     }
 }

@@ -18,7 +18,7 @@ struct Constants
 
 RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
 {
-    info("Initializing rendering system");
+    info("RenderSystem: Initializing");
 
     rtv_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kBackbufferCount);
 
@@ -107,14 +107,14 @@ void RenderSystem::InitWindow()
     window_width_ = static_cast<UINT>(window_rect.right - window_rect.left);
     window_height_ = static_cast<UINT>(window_rect.bottom - window_rect.top);
 
-    info("Creating swap chain with {} render buffers", kBackbufferCount);
+    info("RenderSystem: Creating swap chain with {} render buffers", kBackbufferCount);
     swapchain_ = dx12api().CreateSwapchain(hwnd_, window_width_, window_height_, kBackbufferCount);
 
     frame_submission_fence_ = dx12api().CreateFence();
     win32_event_ = CreateEvent(nullptr, FALSE, FALSE, "Capsaicin frame sync event");
 
     {
-        info("Initializing backbuffers");
+        info("RenderSystem: Initializing backbuffers");
         uint32_t rtv_increment_size =
             dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 

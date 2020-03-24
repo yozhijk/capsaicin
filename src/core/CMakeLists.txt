@@ -8,6 +8,8 @@ add_library(core src/capsaicin.cpp
                  src/systems/render_system.cpp
                  src/systems/blas_system.h
                  src/systems/blas_system.cpp
+                 src/systems/tlas_system.h
+                 src/systems/tlas_system.cpp
                  src/systems/asset_load_system.h
                  src/systems/asset_load_system.cpp)
 

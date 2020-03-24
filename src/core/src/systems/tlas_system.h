@@ -8,15 +8,17 @@ using namespace capsaicin::dx12;
 
 namespace capsaicin
 {
-// Bottom level acceleration structure for the mesh.
-struct BLASComponent
+// Top level acceleration structure for the scene.
+struct TLASComponent
 {
-    ComPtr<ID3D12Resource> blas = nullptr;
+    ComPtr<ID3D12Resource> tlas = nullptr;
+    bool built = false;
 };
 
-class BLASSystem : public System
+class TLASSystem : public System
 {
 public:
+    TLASSystem();
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 };
 }  // namespace capsaicin

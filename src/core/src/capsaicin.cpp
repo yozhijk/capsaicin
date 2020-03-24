@@ -5,9 +5,9 @@
 #include "systems/asset_load_system.h"
 #include "systems/blas_system.h"
 #include "systems/render_system.h"
+#include "systems/tlas_system.h"
 #include "utils/singleton.h"
 #include "yecs/yecs.h"
-
 
 namespace capsaicin
 {
@@ -17,10 +17,14 @@ void Init()
 
     world().RegisterComponent<AssetComponent>();
     world().RegisterComponent<MeshComponent>();
+    world().RegisterComponent<BLASComponent>();
+    world().RegisterComponent<TLASComponent>();
 
     world().RegisterSystem<AssetLoadSystem>();
     world().RegisterSystem<BLASSystem>();
+    world().RegisterSystem<TLASSystem>();
     world().Precede<AssetLoadSystem, BLASSystem>();
+    world().Precede<BLASSystem, TLASSystem>();
 }
 
 void InitRenderSession(void* data)
@@ -28,7 +32,7 @@ void InitRenderSession(void* data)
     auto params = reinterpret_cast<RenderSessionParams*>(data);
     info("capsaicin::InitRenderSession()");
     world().RegisterSystem<RenderSystem>(params->hwnd);
-    world().Precede<BLASSystem, RenderSystem>();
+    world().Precede<TLASSystem, RenderSystem>();
 }
 
 void LoadSceneFromOBJ(const std::string& file_name)
