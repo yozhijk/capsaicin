@@ -5,7 +5,11 @@ add_library(core src/capsaicin.cpp
                  src/dx12/shader_compiler.cpp
                  src/utils/singleton.h
                  src/systems/render_system.h
-                 src/systems/render_system.cpp)
+                 src/systems/render_system.cpp
+                 src/systems/blas_system.h
+                 src/systems/blas_system.cpp
+                 src/systems/asset_load_system.h
+                 src/systems/asset_load_system.cpp)
 
 target_include_directories(core
     INTERFACE
@@ -28,4 +32,4 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/third_party/dxc/dxil.dll
         "\$\(OutDir\)/dxil.dll")
 
-target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid)
+target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid tinyobjloader)

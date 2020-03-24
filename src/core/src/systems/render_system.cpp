@@ -16,17 +16,16 @@ struct Constants
 };
 }  // namespace
 
-RenderSystem::RenderSystem(HWND hwnd)
-    : hwnd_(hwnd), dx12_(Singleton<Dx12>::instance()), shader_compiler_(ShaderCompiler::instance())
+RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
 {
     info("Initializing rendering system");
 
-    rtv_descriptor_heap_ = dx12_.CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kBackbufferCount);
+    rtv_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kBackbufferCount);
 
     for (uint32_t i = 0; i < kBackbufferCount; ++i)
     {
-        gpu_frame_data_[i].command_allocator = dx12_.CreateCommandAllocator();
-        gpu_frame_data_[i].command_list = dx12_.CreateCommandList(gpu_frame_data_[i].command_allocator.Get());
+        gpu_frame_data_[i].command_allocator = dx12api().CreateCommandAllocator();
+        gpu_frame_data_[i].command_list = dx12api().CreateCommandList(gpu_frame_data_[i].command_allocator.Get());
         gpu_frame_data_[i].command_list->Close();
     }
 
@@ -57,7 +56,7 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
 
     command_list->Reset(gpu_frame_data.command_allocator.Get(), nullptr);
 
-    UINT rtv_increment_size = dx12_.device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    UINT rtv_increment_size = dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     CD3DX12_CPU_DESCRIPTOR_HANDLE descriptor_handle(
         rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), backbuffer_index_, rtv_increment_size);
 
@@ -89,12 +88,12 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     command_list->Close();
 
     ID3D12CommandList* to_submit[] = {command_list};
-    dx12_.command_queue()->ExecuteCommandLists(1, to_submit);
+    dx12api().command_queue()->ExecuteCommandLists(1, to_submit);
 
     ThrowIfFailed(swapchain_->Present(1, 0), "Present failed");
 
     gpu_frame_data.submission_id = next_submission_id_;
-    ThrowIfFailed(dx12_.command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
+    ThrowIfFailed(dx12api().command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
                   "Cannot signal fence");
 
     prev_time = time;
@@ -109,21 +108,22 @@ void RenderSystem::InitWindow()
     window_height_ = static_cast<UINT>(window_rect.bottom - window_rect.top);
 
     info("Creating swap chain with {} render buffers", kBackbufferCount);
-    swapchain_ = dx12_.CreateSwapchain(hwnd_, window_width_, window_height_, kBackbufferCount);
+    swapchain_ = dx12api().CreateSwapchain(hwnd_, window_width_, window_height_, kBackbufferCount);
 
-    frame_submission_fence_ = dx12_.CreateFence();
+    frame_submission_fence_ = dx12api().CreateFence();
     win32_event_ = CreateEvent(nullptr, FALSE, FALSE, "Capsaicin frame sync event");
 
     {
         info("Initializing backbuffers");
-        uint32_t rtv_increment_size = dx12_.device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        uint32_t rtv_increment_size =
+            dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
         for (uint32_t i = 0; i < kBackbufferCount; ++i)
         {
             CD3DX12_CPU_DESCRIPTOR_HANDLE descriptor_handle(
                 rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), i, rtv_increment_size);
             ThrowIfFailed(swapchain_->GetBuffer(i, IID_PPV_ARGS(&backbuffers_[i])), "Cannot retrieve swapchain buffer");
-            dx12_.device()->CreateRenderTargetView(backbuffers_[i].Get(), nullptr, descriptor_handle);
+            dx12api().device()->CreateRenderTargetView(backbuffers_[i].Get(), nullptr, descriptor_handle);
         }
     }
 }
@@ -135,10 +135,11 @@ void RenderSystem::InitMainPipeline()
 
     CD3DX12_ROOT_SIGNATURE_DESC desc = {};
     desc.Init(MainRootSignature::kNumEntries, root_entries);
-    root_signature_ = dx12_.CreateRootSignature(desc);
+    root_signature_ = dx12api().CreateRootSignature(desc);
 
-    auto vertex_shader = shader_compiler_.CompileFromFile("../../../src/core/shaders/simple.hlsl", "vs_6_0", "VsMain");
-    auto pixel_shader = shader_compiler_.CompileFromFile("../../../src/core/shaders/simple.hlsl", "ps_6_0", "PsMain");
+    ShaderCompiler& shader_compiler{ShaderCompiler::instance()};
+    auto vertex_shader = shader_compiler.CompileFromFile("../../../src/core/shaders/simple.hlsl", "vs_6_0", "VsMain");
+    auto pixel_shader = shader_compiler.CompileFromFile("../../../src/core/shaders/simple.hlsl", "ps_6_0", "PsMain");
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
     pso_desc.InputLayout = {nullptr, 0};
@@ -156,7 +157,7 @@ void RenderSystem::InitMainPipeline()
     pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     pso_desc.SampleDesc.Count = 1;
 
-    pipeline_state_ = dx12_.CreatePipelineState(pso_desc);
+    pipeline_state_ = dx12api().CreatePipelineState(pso_desc);
 }
 
 void RenderSystem::WaitForGPUFrame(uint32_t index)

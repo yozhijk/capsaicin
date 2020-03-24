@@ -52,7 +52,7 @@ ComPtr<ID3D12Fence> Dx12::CreateFence(UINT64 initial_value)
     return fence;
 }
 
-ComPtr<ID3D12Resource> Dx12::CreateUploadBuffer(UINT64 size, void* data)
+ComPtr<ID3D12Resource> Dx12::CreateUploadBuffer(UINT64 size, const void* data)
 {
     ComPtr<ID3D12Resource> resource = nullptr;
     auto heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);

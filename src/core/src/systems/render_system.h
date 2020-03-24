@@ -34,8 +34,6 @@ private:
     std::array<GPUFrameData, kBackbufferCount> gpu_frame_data_;
 
     HWND hwnd_;
-    Dx12& dx12_;
-    ShaderCompiler& shader_compiler_;
 
     // Current backbuffer index.
     UINT backbuffer_index_ = 0;

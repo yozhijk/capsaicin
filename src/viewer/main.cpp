@@ -63,6 +63,7 @@ int main()
 
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
+            LoadSceneFromOBJ("../../../assets/cornell_box.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 

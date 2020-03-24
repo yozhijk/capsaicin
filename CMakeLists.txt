@@ -62,3 +62,4 @@ add_subdirectory(src)
 set(YECS_ENABLE_TESTING OFF CACHE BOOL "Disable test generation for yecs" FORCE)
 
 add_subdirectory(third_party/yecs)
+add_subdirectory(third_party/tinyobjloader)
