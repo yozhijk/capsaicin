@@ -5,7 +5,6 @@
 #include "src/dx12/dx12.h"
 #include "src/dx12/shader_compiler.h"
 
-
 using namespace capsaicin::dx12;
 
 namespace capsaicin
@@ -24,6 +23,7 @@ private:
     void InitMainPipeline();
     void WaitForGPUFrame(uint32_t index);
 
+    // Per-frame GPU data.
     struct GPUFrameData
     {
         ComPtr<ID3D12CommandAllocator> command_allocator = nullptr;
@@ -35,6 +35,7 @@ private:
 
     HWND hwnd_;
     Dx12& dx12_;
+    ShaderCompiler& shader_compiler_;
 
     // Current backbuffer index.
     UINT backbuffer_index_ = 0;

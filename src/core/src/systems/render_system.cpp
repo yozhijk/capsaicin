@@ -16,7 +16,8 @@ struct Constants
 };
 }  // namespace
 
-RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd), dx12_(Singleton<Dx12>::instance())
+RenderSystem::RenderSystem(HWND hwnd)
+    : hwnd_(hwnd), dx12_(Singleton<Dx12>::instance()), shader_compiler_(ShaderCompiler::instance())
 {
     info("Initializing rendering system");
 
@@ -64,21 +65,21 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
         backbuffers_[backbuffer_index_].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
     command_list->ResourceBarrier(1, &rt_transition);
 
-    // command_list->SetGraphicsRootSignature(root_signature_.Get());
-    // command_list->SetGraphicsRoot32BitConstants(MainRootSignature::kConstants, 1u, &rotation, 0);
-    // command_list->SetPipelineState(pipeline_state_.Get());
+    command_list->SetGraphicsRootSignature(root_signature_.Get());
+    command_list->SetGraphicsRoot32BitConstants(MainRootSignature::kConstants, 1u, &rotation, 0);
+    command_list->SetPipelineState(pipeline_state_.Get());
 
-    // D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width_), static_cast<float>(window_height_)};
-    // D3D12_RECT scissor_rect{0, 0, static_cast<LONG>(window_width_), static_cast<LONG>(window_height_)};
-    // command_list->RSSetViewports(1, &viewport);
-    // command_list->RSSetScissorRects(1, &scissor_rect);
-    // command_list->OMSetRenderTargets(1, &descriptor_handle, FALSE, nullptr);
+    D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width_), static_cast<float>(window_height_)};
+    D3D12_RECT scissor_rect{0, 0, static_cast<LONG>(window_width_), static_cast<LONG>(window_height_)};
+    command_list->RSSetViewports(1, &viewport);
+    command_list->RSSetScissorRects(1, &scissor_rect);
+    command_list->OMSetRenderTargets(1, &descriptor_handle, FALSE, nullptr);
 
     FLOAT shitty_red[] = {0.77f, 0.15f, 0.1f, 1.f};
     command_list->ClearRenderTargetView(descriptor_handle, shitty_red, 0, nullptr);
 
-    // command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    // command_list->DrawInstanced(3, 1, 0, 0);
+    command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    command_list->DrawInstanced(3, 1, 0, 0);
 
     command_list->ResourceBarrier(
         1,
@@ -127,7 +128,36 @@ void RenderSystem::InitWindow()
     }
 }
 
-void RenderSystem::InitMainPipeline() {}
+void RenderSystem::InitMainPipeline()
+{
+    CD3DX12_ROOT_PARAMETER root_entries[MainRootSignature::kNumEntries] = {};
+    root_entries[kConstants].InitAsConstants(sizeof(Constants), 0);
+
+    CD3DX12_ROOT_SIGNATURE_DESC desc = {};
+    desc.Init(MainRootSignature::kNumEntries, root_entries);
+    root_signature_ = dx12_.CreateRootSignature(desc);
+
+    auto vertex_shader = shader_compiler_.CompileFromFile("../../../src/core/shaders/simple.hlsl", "vs_6_0", "VsMain");
+    auto pixel_shader = shader_compiler_.CompileFromFile("../../../src/core/shaders/simple.hlsl", "ps_6_0", "PsMain");
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+    pso_desc.InputLayout = {nullptr, 0};
+    pso_desc.pRootSignature = root_signature_.Get();
+    pso_desc.VS = vertex_shader;
+    pso_desc.PS = pixel_shader;
+    pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    pso_desc.DepthStencilState.DepthEnable = FALSE;
+    pso_desc.DepthStencilState.StencilEnable = FALSE;
+    pso_desc.SampleMask = UINT_MAX;
+    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pso_desc.NumRenderTargets = 1;
+    pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pso_desc.SampleDesc.Count = 1;
+
+    pipeline_state_ = dx12_.CreatePipelineState(pso_desc);
+}
 
 void RenderSystem::WaitForGPUFrame(uint32_t index)
 {

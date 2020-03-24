@@ -21,10 +21,13 @@ void SetInputState(const InputState&) { info("capsaicin::SetInputState()"); }
 void Update(float time_ms) { info("capsaicin::Update({})", time_ms); }
 void Render()
 {
-    info("capsaicin::Render()");
     world().Run();
 }
 void SetOption() { info("capsaicin::SetOption()"); }
-void ShutdownRenderSession() { info("capsaicin::ShutdownRenderSession()"); }
+void ShutdownRenderSession()
+{
+    info("capsaicin::ShutdownRenderSession()");
+    world().Reset();
+}
 void Shutdown() { info("capsaicin::Shutdown()"); }
 }  // namespace capsaicin
