@@ -90,15 +90,27 @@ ComPtr<ID3D12Resource> Dx12::CreateUAVBuffer(UINT64 size, D3D12_RESOURCE_STATES 
     return resource;
 }
 
-ComPtr<ID3D12DescriptorHeap> Dx12::CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type, UINT descriptor_count)
+ComPtr<ID3D12DescriptorHeap> Dx12::CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type, UINT descriptor_count, D3D12_DESCRIPTOR_HEAP_FLAGS flags)
 {
     ComPtr<ID3D12DescriptorHeap> heap;
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
     heap_desc.NumDescriptors = descriptor_count;
     heap_desc.Type = heap_type;
-    heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    heap_desc.Flags = flags;
     ThrowIfFailed(device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&heap)), "Cannot create descriptor heap");
     return heap;
+}
+
+ComPtr<ID3D12Resource> Dx12::CreateResource(const D3D12_RESOURCE_DESC& desc, const D3D12_HEAP_PROPERTIES& heap_properties, D3D12_RESOURCE_STATES initial_state)
+{
+    ComPtr<ID3D12Resource> resource = nullptr;
+
+    ThrowIfFailed(
+        device()->CreateCommittedResource(
+            &heap_properties, D3D12_HEAP_FLAG_NONE, &desc, initial_state, nullptr, IID_PPV_ARGS(&resource)),
+        "Cannot create resource");
+
+    return resource;
 }
 
 void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)

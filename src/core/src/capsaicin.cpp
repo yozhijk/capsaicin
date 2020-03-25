@@ -9,6 +9,7 @@
 #include "utils/singleton.h"
 #include "yecs/yecs.h"
 
+
 namespace capsaicin
 {
 void Init()
@@ -23,14 +24,16 @@ void Init()
     world().RegisterSystem<AssetLoadSystem>();
     world().RegisterSystem<BLASSystem>();
     world().RegisterSystem<TLASSystem>();
+
     world().Precede<AssetLoadSystem, BLASSystem>();
     world().Precede<BLASSystem, TLASSystem>();
 }
 
 void InitRenderSession(void* data)
 {
-    auto params = reinterpret_cast<RenderSessionParams*>(data);
     info("capsaicin::InitRenderSession()");
+
+    auto params = reinterpret_cast<RenderSessionParams*>(data);
     world().RegisterSystem<RenderSystem>(params->hwnd);
     world().Precede<TLASSystem, RenderSystem>();
 }

@@ -54,7 +54,7 @@ void BuildBLAS(MeshComponent& gpu_mesh, BLASComponent& blas)
     build_desc.DestAccelerationStructureData = blas.blas->GetGPUVirtualAddress();
 
     cmdlist4->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
-    command_list->Close();
+    cmdlist4->Close();
 
     // Execute command list synchronously.
     ID3D12CommandList* command_lists[] = {command_list.Get()};

@@ -22,7 +22,13 @@ public:
     ComPtr<ID3D12Resource> CreateUploadBuffer(UINT64 size, const void* data = nullptr);
     ComPtr<ID3D12Resource> CreateUAVBuffer(UINT64 size,
                                            D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COMMON);
-    ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type, UINT descriptor_count);
+    ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
+        D3D12_DESCRIPTOR_HEAP_TYPE heap_type,
+        UINT descriptor_count,
+        D3D12_DESCRIPTOR_HEAP_FLAGS flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+    ComPtr<ID3D12Resource> CreateResource(const D3D12_RESOURCE_DESC& desc,
+                                          const D3D12_HEAP_PROPERTIES& heap_properties,
+                                          D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COMMON);
 
     ComPtr<IDXGISwapChain3> CreateSwapchain(HWND hwnd, UINT width, UINT height, UINT backbuffer_count);
     ComPtr<ID3D12RootSignature> CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC& desc);

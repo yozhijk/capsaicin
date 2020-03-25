@@ -2,6 +2,7 @@
 
 #include "blas_system.h"
 
+
 namespace capsaicin
 {
 namespace

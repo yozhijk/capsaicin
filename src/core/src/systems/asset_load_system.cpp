@@ -74,6 +74,10 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
             }
             else
             {
+                uint32_t vertex_index = (uint32_t)mesh_data.positions.size() / 3;
+                mesh_data.indices.push_back(vertex_index);
+                index_cache[index] = vertex_index;
+
                 mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index]);
                 mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 1]);
                 mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 2]);
@@ -93,19 +97,14 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
 
                 if (index.texcoord_index != -1)
                 {
-                    mesh_data.texcoords.push_back(attrib.texcoords[3 * index.texcoord_index]);
-                    mesh_data.texcoords.push_back(attrib.texcoords[3 * index.texcoord_index + 1]);
+                    mesh_data.texcoords.push_back(attrib.texcoords[2 * index.texcoord_index]);
+                    mesh_data.texcoords.push_back(attrib.texcoords[2 * index.texcoord_index + 1]);
                 }
                 else
                 {
                     mesh_data.texcoords.push_back(0.f);
                     mesh_data.texcoords.push_back(0.f);
                 }
-
-                uint32_t vertex_index = (uint32_t)mesh_data.positions.size();
-                index_cache[index] = vertex_index;
-
-                mesh_data.indices.push_back(vertex_index);
             }
         }
     }

@@ -28,4 +28,6 @@ using std::uint8_t;
 namespace capsaicin
 {
 inline World& world() { return Singleton<World>::instance(); };
+
+template <typename T, typename U> T align(T val, U a) { return T((val + a - 1) / a * a); }
 }
