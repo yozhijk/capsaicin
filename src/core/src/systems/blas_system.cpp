@@ -1,18 +1,17 @@
 #include "blas_system.h"
 
-#include "asset_load_system.h"
+#include "src/systems/asset_load_system.h"
+#include "src/systems/render_system.h"
 
 namespace capsaicin
 {
 namespace
 {
-void BuildBLAS(MeshComponent& gpu_mesh, BLASComponent& blas)
+void BuildBLAS(MeshComponent& gpu_mesh,
+               BLASComponent& blas,
+               ID3D12GraphicsCommandList* command_list,
+               RenderSystem& render_system)
 {
-    auto fence = dx12api().CreateFence(0);
-
-    auto command_allocator = dx12api().CreateCommandAllocator();
-    auto command_list = dx12api().CreateCommandList(command_allocator.Get());
-
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     command_list->QueryInterface(IID_PPV_ARGS(&cmdlist4));
 
@@ -41,8 +40,8 @@ void BuildBLAS(MeshComponent& gpu_mesh, BLASComponent& blas)
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
     device5->GetRaytracingAccelerationStructurePrebuildInfo(&build_input, &info);
 
-    auto scratch_buffer =
-        dx12api().CreateUAVBuffer(info.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    auto scratch_buffer = dx12api().CreateUAVBuffer(info.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    render_system.AddAutoreleaseResource(scratch_buffer);
 
     blas.blas = dx12api().CreateUAVBuffer(info.ResultDataMaxSizeInBytes,
                                           D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
@@ -54,18 +53,20 @@ void BuildBLAS(MeshComponent& gpu_mesh, BLASComponent& blas)
     build_desc.DestAccelerationStructureData = blas.blas->GetGPUVirtualAddress();
 
     cmdlist4->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
-    cmdlist4->Close();
-
-    // Execute command list synchronously.
-    ID3D12CommandList* command_lists[] = {command_list.Get()};
-    dx12api().command_queue()->ExecuteCommandLists(1, command_lists);
-    dx12api().command_queue()->Signal(fence.Get(), 1);
-
-    while (fence->GetCompletedValue() != 1) std::this_thread::yield();
+    cmdlist4->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(blas.blas.Get()));
 }
 }  // namespace
 void BLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
+    auto& render_system = world().GetSystem<RenderSystem>();
+
+    // Create command list if needed.
+    if (!build_command_list_)
+    {
+        build_command_list_ = dx12api().CreateCommandList(render_system.current_frame_command_allocator());
+        build_command_list_->Close();
+    }
+
     auto& meshes = access.Read<MeshComponent>();
     auto& blases = access.Read<BLASComponent>();
 
@@ -80,14 +81,22 @@ void BLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Sub
         info("BLASSystem: found {} meshes", entities.size());
     }
 
-    // Load asset.
-    for (auto e : entities)
+    if (!entities.empty())
     {
-        auto& gpu_mesh = world().GetComponent<MeshComponent>(e);
-        auto& blas = world().AddComponent<BLASComponent>(e);
+        build_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
 
-        info("BLASSystem: Building BLAS");
-        BuildBLAS(gpu_mesh, blas);
+        // Load asset.
+        for (auto e : entities)
+        {
+            auto& gpu_mesh = world().GetComponent<MeshComponent>(e);
+            auto& blas = world().AddComponent<BLASComponent>(e);
+
+            info("BLASSystem: Building BLAS");
+            BuildBLAS(gpu_mesh, blas, build_command_list_.Get(), render_system);
+        }
+
+        build_command_list_->Close();
+        render_system.PushCommandList(build_command_list_.Get());
     }
 }
 }  // namespace capsaicin

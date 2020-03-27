@@ -22,6 +22,8 @@ public:
     ComPtr<ID3D12Resource> CreateUploadBuffer(UINT64 size, const void* data = nullptr);
     ComPtr<ID3D12Resource> CreateUAVBuffer(UINT64 size,
                                            D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COMMON);
+    ComPtr<ID3D12Resource> CreateConstantBuffer(UINT64 size,
+                                                D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COMMON);
     ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
         D3D12_DESCRIPTOR_HEAP_TYPE heap_type,
         UINT descriptor_count,

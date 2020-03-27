@@ -6,6 +6,8 @@
 #include "systems/blas_system.h"
 #include "systems/render_system.h"
 #include "systems/tlas_system.h"
+#include "systems/camera_system.h"
+#include "systems/input_system.h"
 #include "utils/singleton.h"
 #include "yecs/yecs.h"
 
@@ -20,13 +22,21 @@ void Init()
     world().RegisterComponent<MeshComponent>();
     world().RegisterComponent<BLASComponent>();
     world().RegisterComponent<TLASComponent>();
+    world().RegisterComponent<CameraComponent>();
 
     world().RegisterSystem<AssetLoadSystem>();
     world().RegisterSystem<BLASSystem>();
     world().RegisterSystem<TLASSystem>();
+    world().RegisterSystem<CameraSystem>();
+    world().RegisterSystem<InputSystem>();
 
+    // TODO: enable parallel execution.
+    // Currently each system is taking care of work submission, 
+    // so sumbitting it in parallel would be dangerous.
     world().Precede<AssetLoadSystem, BLASSystem>();
     world().Precede<BLASSystem, TLASSystem>();
+    world().Precede<TLASSystem, CameraSystem>();
+    world().Precede<InputSystem, CameraSystem>();
 }
 
 void InitRenderSession(void* data)
@@ -35,7 +45,7 @@ void InitRenderSession(void* data)
 
     auto params = reinterpret_cast<RenderSessionParams*>(data);
     world().RegisterSystem<RenderSystem>(params->hwnd);
-    world().Precede<TLASSystem, RenderSystem>();
+    world().Precede<CameraSystem, RenderSystem>();
 }
 
 void LoadSceneFromOBJ(const std::string& file_name)
@@ -48,7 +58,12 @@ void LoadSceneFromOBJ(const std::string& file_name)
     asset.file_name = file_name;
 }
 
-void SetInputState(const InputState&) { info("capsaicin::SetInputState()"); }
+void ProcessInput(void* input)
+{
+    // info("capsaicin::ProcessInput()");
+    world().GetSystem<InputSystem>().ProcessInput(input);
+}
+
 void Update(float time_ms) { info("capsaicin::Update({})", time_ms); }
 void Render() { world().Run(); }
 void SetOption() { info("capsaicin::SetOption()"); }

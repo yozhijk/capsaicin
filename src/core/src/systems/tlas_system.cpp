@@ -1,19 +1,17 @@
 #include "tlas_system.h"
 
-#include "blas_system.h"
-
+#include "src/systems/blas_system.h"
+#include "src/systems/render_system.h"
 
 namespace capsaicin
 {
 namespace
 {
-void BuildTLAS(const EntitySet::EntityStorage& entities, TLASComponent& tlas)
+void BuildTLAS(const EntitySet::EntityStorage& entities,
+               TLASComponent& tlas,
+               ID3D12GraphicsCommandList* command_list,
+               RenderSystem& render_system)
 {
-    auto fence = dx12api().CreateFence(0);
-
-    auto command_allocator = dx12api().CreateCommandAllocator();
-    auto command_list = dx12api().CreateCommandList(command_allocator.Get());
-
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     command_list->QueryInterface(IID_PPV_ARGS(&cmdlist4));
 
@@ -31,6 +29,7 @@ void BuildTLAS(const EntitySet::EntityStorage& entities, TLASComponent& tlas)
     device5->GetRaytracingAccelerationStructurePrebuildInfo(&build_input, &info);
 
     auto scratch_buffer = dx12api().CreateUAVBuffer(info.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    render_system.AddAutoreleaseResource(scratch_buffer);
 
     tlas.tlas = dx12api().CreateUAVBuffer(info.ResultDataMaxSizeInBytes,
                                           D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
@@ -55,6 +54,8 @@ void BuildTLAS(const EntitySet::EntityStorage& entities, TLASComponent& tlas)
 
     auto upload_buffer =
         dx12api().CreateUploadBuffer(sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * entities.size(), instance_descs.data());
+    render_system.AddAutoreleaseResource(upload_buffer);
+
     build_input.InstanceDescs = upload_buffer->GetGPUVirtualAddress();
 
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build_desc;
@@ -64,14 +65,6 @@ void BuildTLAS(const EntitySet::EntityStorage& entities, TLASComponent& tlas)
     build_desc.DestAccelerationStructureData = tlas.tlas->GetGPUVirtualAddress();
 
     cmdlist4->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
-    command_list->Close();
-
-    // Execute command list synchronously.
-    ID3D12CommandList* command_lists[] = {command_list.Get()};
-    dx12api().command_queue()->ExecuteCommandLists(1, command_lists);
-    dx12api().command_queue()->Signal(fence.Get(), 1);
-
-    while (fence->GetCompletedValue() != 1) std::this_thread::yield();
 }
 }  // namespace
 
@@ -79,6 +72,15 @@ TLASSystem::TLASSystem() { world().CreateEntity().AddComponent<TLASComponent>().
 
 void TLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
+    auto& render_system = world().GetSystem<RenderSystem>();
+
+    // Create command list if needed.
+    if (!build_command_list_)
+    {
+        build_command_list_ = dx12api().CreateCommandList(render_system.current_frame_command_allocator());
+        build_command_list_->Close();
+    }
+
     auto& tlases = access.Write<TLASComponent>();
     auto& blases = access.Read<BLASComponent>();
 
@@ -96,9 +98,14 @@ void TLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Sub
 
     if (!tlas.built)
     {
+        build_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
+
         info("TLASSystem: Building TLAS");
-        BuildTLAS(entities_with_blas, tlas);
+        BuildTLAS(entities_with_blas, tlas, build_command_list_.Get(), render_system);
         tlas.built = true;
+
+        build_command_list_->Close();
+        render_system.PushCommandList(build_command_list_.Get());
     }
 }
 }  // namespace capsaicin

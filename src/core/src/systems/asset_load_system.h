@@ -29,5 +29,8 @@ public:
     ~AssetLoadSystem() override = default;
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
+
+private:
+    ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
 };
 }  // namespace capsaicin

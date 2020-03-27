@@ -1,9 +1,9 @@
+#include <windows.h>
+
 #include <cassert>
 #include <iostream>
 #include <type_traits>
 #include <vector>
-
-#include <windows.h>
 
 #include "capsaicin.h"
 
@@ -17,6 +17,28 @@ LRESULT __stdcall WndProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT:
         Render();
         return 0;
+    case WM_ACTIVATEAPP:
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYUP:
+    case WM_INPUT:
+    case WM_MOUSEMOVE:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+    case WM_MOUSEWHEEL:
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONUP:
+    case WM_MOUSEHOVER:
+    {
+        Input input{msg, lp, wp};
+        ProcessInput(&input);
+        return 0;
+    }
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
@@ -63,7 +85,7 @@ int main()
 
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
-            LoadSceneFromOBJ("../../../assets/cornell_box.obj");
+            LoadSceneFromOBJ("../../../assets/sponza.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 

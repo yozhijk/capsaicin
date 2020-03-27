@@ -11,36 +11,23 @@ struct RenderSessionParams
 {
     HWND hwnd;
 };
+
+struct Input
+{
+    UINT message;
+    LPARAM lparam;
+    WPARAM wparam;
+};
 #endif
 
 using std::uint32_t;
 
 namespace capsaicin
 {
-struct InputState
-{
-    struct
-    {
-        bool fwd = false;
-        bool back = false;
-        bool left = false;
-        bool right = false;
-        bool up = false;
-        bool down = false;
-    } keys;
-
-    struct
-    {
-        bool tracking = false;
-        float delta_x = 0.f;
-        float delta_y = 0.f;
-    } mouse;
-};
-
 void Init();
 void InitRenderSession(void* params);
 void LoadSceneFromOBJ(const std::string& file_name);
-void SetInputState(const InputState& input);
+void ProcessInput(void* input);
 void Update(float time_ms);
 void Render();
 void SetOption();

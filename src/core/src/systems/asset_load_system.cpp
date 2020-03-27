@@ -1,7 +1,8 @@
 #include "asset_load_system.h"
 
+#include "src/common.h"
+#include "src/systems/render_system.h"
 #include "tiny_obj_loader.h"
-
 
 using namespace tinyobj;
 using namespace std;
@@ -110,10 +111,11 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
     }
 }
 
-void CreateGPUBuffers(const MeshData& mesh_data, MeshComponent& mesh_component)
+void CreateGPUBuffers(const MeshData& mesh_data,
+                      MeshComponent& mesh_component,
+                      ID3D12GraphicsCommandList* command_list,
+                      RenderSystem& render_system)
 {
-    auto fence = dx12api().CreateFence(0);
-
     // Create mesh buffers in GPU memory.
     mesh_component.vertices =
         dx12api().CreateUAVBuffer(mesh_data.positions.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
@@ -126,15 +128,17 @@ void CreateGPUBuffers(const MeshData& mesh_data, MeshComponent& mesh_component)
     auto index_upload_buffer =
         dx12api().CreateUploadBuffer(mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
 
-    auto command_allocator = dx12api().CreateCommandAllocator();
-    auto command_list = dx12api().CreateCommandList(command_allocator.Get());
+    render_system.AddAutoreleaseResource(vertex_upload_buffer);
+    render_system.AddAutoreleaseResource(index_upload_buffer);
 
-    // Transitions for mesh buffes to UAV.
+    // Transitions for mesh buffes to non pixel shader resource.
     D3D12_RESOURCE_BARRIER copy_dest_to_uav[2] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            mesh_component.vertices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            mesh_component.indices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)};
+        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.vertices.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.indices.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
 
     // Copy data.
     command_list->CopyBufferRegion(
@@ -144,20 +148,20 @@ void CreateGPUBuffers(const MeshData& mesh_data, MeshComponent& mesh_component)
 
     // Transition to UAV.
     command_list->ResourceBarrier(2, &copy_dest_to_uav[0]);
-
-    command_list->Close();
-
-    // Execute command list synchronously.
-    ID3D12CommandList* command_lists[] = {command_list.Get()};
-    dx12api().command_queue()->ExecuteCommandLists(1, command_lists);
-    dx12api().command_queue()->Signal(fence.Get(), 1);
-
-    while (fence->GetCompletedValue() != 1) std::this_thread::yield();
 }
 }  // namespace
 
 void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
+    auto& render_system = world().GetSystem<RenderSystem>();
+
+    // Create command list if needed.
+    if (!upload_command_list_)
+    {
+        upload_command_list_ = dx12api().CreateCommandList(render_system.current_frame_command_allocator());
+        upload_command_list_->Close();
+    }
+
     auto& assets = access.Read<AssetComponent>();
     auto& meshes = access.Read<MeshComponent>();
 
@@ -172,19 +176,27 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         info("AssetLoadSystem: found {} assets", entities.size());
     }
 
-    // Load asset.
-    for (auto e : entities)
+    if (!entities.empty())
     {
-        auto& asset = world().GetComponent<AssetComponent>(e);
-        auto& gpu_mesh = world().AddComponent<MeshComponent>(e);
+        upload_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
 
-        info("AssetLoadSystem: Loading {}", asset.file_name);
+        // Load asset.
+        for (auto e : entities)
+        {
+            auto& asset = world().GetComponent<AssetComponent>(e);
+            auto& gpu_mesh = world().AddComponent<MeshComponent>(e);
 
-        MeshData mesh_data;
-        LoadObjFile(asset, mesh_data);
+            info("AssetLoadSystem: Loading {}", asset.file_name);
 
-        info("AssetLoadSystem: Allocating GPU buffers for {}", asset.file_name);
-        CreateGPUBuffers(mesh_data, gpu_mesh);
+            MeshData mesh_data;
+            LoadObjFile(asset, mesh_data);
+
+            info("AssetLoadSystem: Allocating GPU buffers for {}", asset.file_name);
+            CreateGPUBuffers(mesh_data, gpu_mesh, upload_command_list_.Get(), render_system);
+        }
+
+        upload_command_list_->Close();
+        render_system.PushCommandList(upload_command_list_.Get());
     }
 }
 }  // namespace capsaicin

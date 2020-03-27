@@ -11,13 +11,20 @@ add_library(core src/capsaicin.cpp
                  src/systems/tlas_system.h
                  src/systems/tlas_system.cpp
                  src/systems/asset_load_system.h
-                 src/systems/asset_load_system.cpp)
+                 src/systems/asset_load_system.cpp
+                 src/systems/camera_system.h
+                 src/systems/camera_system.cpp
+                 src/systems/input_system.h
+                 src/systems/input_system.cpp
+                 ${PROJECT_SOURCE_DIR}/third_party/directxtk/Mouse.cpp
+                 ${PROJECT_SOURCE_DIR}/third_party/directxtk/Keyboard.cpp)
 
 target_include_directories(core
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${PROJECT_SOURCE_DIR}/third_party/dxc
+        ${PROJECT_SOURCE_DIR}/third_party/directxtk
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}
 )

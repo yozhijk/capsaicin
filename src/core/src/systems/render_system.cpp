@@ -1,7 +1,8 @@
 #include "render_system.h"
 
 #include "src/common.h"
-#include "tlas_system.h"
+#include "src/systems/camera_system.h"
+#include "src/systems/tlas_system.h"
 
 namespace capsaicin
 {
@@ -17,17 +18,20 @@ enum
 };
 }
 
+// Signature for visibility raytracing pass.
 namespace RaytracingRootSignature
 {
 enum
 {
     kConstants = 0,
+    kCameraBuffer,
     kAccelerationStructure,
     kOutput,
     kNumEntries
 };
 }
 
+// Root constants for raster blit.
 struct Constants
 {
     uint32_t width;
@@ -35,72 +39,93 @@ struct Constants
     float rotation;
     uint32_t padding;
 };
-}  // namespace
 
-RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
+// Find TLAS component and retrieve TLAS resource.
+ID3D12Resource* GetSceneTLAS(ComponentAccess& access, EntityQuery& entity_query)
 {
-    info("RenderSystem: Initializing");
-
-    rtv_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kBackbufferCount);
-    uav_descriptor_heap_ = dx12api().CreateDescriptorHeap(
-        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kBackbufferCount, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-    srv_descriptor_heap_ = dx12api().CreateDescriptorHeap(
-        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kBackbufferCount, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
-
-    for (uint32_t i = 0; i < kBackbufferCount; ++i)
-    { gpu_frame_data_[i].command_allocator = dx12api().CreateCommandAllocator(); }
-
-    // Create command list.
-    command_list_ = dx12api().CreateCommandList(gpu_frame_data_[0].command_allocator.Get());
-    command_list_->Close();
-
-    raytracing_command_list_ = dx12api().CreateCommandList(gpu_frame_data_[0].command_allocator.Get());
-    raytracing_command_list_->Close();
-
-    InitWindow();
-    InitMainPipeline();
-    InitRaytracingPipeline();
-}
-
-RenderSystem::~RenderSystem() {}
-
-void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
-{
-    static auto time = std::chrono::high_resolution_clock::now();
-    static auto prev_time = std::chrono::high_resolution_clock::now();
-    static float rotation = 0.f;
-
-    time = std::chrono::high_resolution_clock::now();
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count();
-    rotation += delta_ms * 3.14f / 1000.f;
-
     // Find scene TLAS.
     auto& tlases = access.Read<TLASComponent>();
     auto entities = entity_query().Filter([&tlases](Entity e) { return tlases.HasComponent(e); }).entities();
-
-    auto& tlas = tlases.GetComponent(entities[0]);
-
     if (entities.size() != 1)
     {
         error("RenderSystem: no TLASes found");
         throw std::runtime_error("RenderSystem: no TLASes found");
     }
 
-    backbuffer_index_ = swapchain_->GetCurrentBackBufferIndex();
+    auto& tlas = tlases.GetComponent(entities[0]);
+    return tlas.tlas.Get();
+}
 
-    WaitForGPUFrame(backbuffer_index_);
+ID3D12Resource* GetCamera(ComponentAccess& access, EntityQuery& entity_query)
+{
+    auto& cameras = access.Read<CameraComponent>();
+    auto entities = entity_query().Filter([&cameras](Entity e) { return cameras.HasComponent(e); }).entities();
+    if (entities.size() != 1)
+    {
+        error("RenderSystem: no cameras found");
+        throw std::runtime_error("RenderSystem: no cameras found");
+    }
 
-    Raytrace(tlas.tlas.Get());
+    auto& camera = cameras.GetComponent(entities[0]);
+    return camera.camera_buffer.Get();
+}
+}  // namespace
 
-    Render(rotation);
+RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
+{
+    info("RenderSystem: Initializing");
+
+    // Render target descriptor heap.
+    rtv_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kNumGPUFramesInFlight);
+
+    // Create UAV and SRV descriptor heaps for RT output.
+    uav_descriptor_heap_ = dx12api().CreateDescriptorHeap(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kNumGPUFramesInFlight, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+    srv_descriptor_heap_ = dx12api().CreateDescriptorHeap(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kNumGPUFramesInFlight, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+
+    // Create command allocators: one per GPU frame.
+    for (uint32_t i = 0; i < kNumGPUFramesInFlight; ++i)
+    { gpu_frame_data_[i].command_allocator = dx12api().CreateCommandAllocator(); }
+
+    // Create command list for raster blit.
+    command_list_ = dx12api().CreateCommandList(gpu_frame_data_[0].command_allocator.Get());
+    command_list_->Close();
+
+    // Create command list for visibility raytracing.
+    raytracing_command_list_ = dx12api().CreateCommandList(gpu_frame_data_[0].command_allocator.Get());
+    raytracing_command_list_->Close();
+
+    // Initialize rendering to main window.
+    InitWindow();
+    // Initialize raster pipeline.
+    InitMainPipeline();
+    // Initialize raytracing pipeline.
+    InitRaytracingPipeline();
+
+    // Initialize backbuffer.
+    current_gpu_frame_index_ = swapchain_->GetCurrentBackBufferIndex();
+}
+
+RenderSystem::~RenderSystem() = default;
+
+void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
+{
+    Raytrace(GetSceneTLAS(access, entity_query), GetCamera(access, entity_query));
+
+    Render(0.f);
+
+    ExecuteCommandLists(current_gpu_frame_index());
 
     ThrowIfFailed(swapchain_->Present(1, 0), "Present failed");
 
-    gpu_frame_data_[backbuffer_index_].submission_id = next_submission_id_;
+    gpu_frame_data_[current_gpu_frame_index()].submission_id = next_submission_id_;
     ThrowIfFailed(dx12api().command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
                   "Cannot signal fence");
 
-    prev_time = time;
+    current_gpu_frame_index_ = swapchain_->GetCurrentBackBufferIndex();
+
+    WaitForGPUFrame(current_gpu_frame_index());
 }
 
 void RenderSystem::InitWindow()
@@ -111,8 +136,8 @@ void RenderSystem::InitWindow()
     window_width_ = static_cast<UINT>(window_rect.right - window_rect.left);
     window_height_ = static_cast<UINT>(window_rect.bottom - window_rect.top);
 
-    info("RenderSystem: Creating swap chain with {} render buffers", kBackbufferCount);
-    swapchain_ = dx12api().CreateSwapchain(hwnd_, window_width_, window_height_, kBackbufferCount);
+    info("RenderSystem: Creating swap chain with {} render buffers", kNumGPUFramesInFlight);
+    swapchain_ = dx12api().CreateSwapchain(hwnd_, window_width_, window_height_, kNumGPUFramesInFlight);
 
     frame_submission_fence_ = dx12api().CreateFence();
     win32_event_ = CreateEvent(nullptr, FALSE, FALSE, "Capsaicin frame sync event");
@@ -122,7 +147,7 @@ void RenderSystem::InitWindow()
         uint32_t rtv_increment_size =
             dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-        for (uint32_t i = 0; i < kBackbufferCount; ++i)
+        for (uint32_t i = 0; i < kNumGPUFramesInFlight; ++i)
         {
             CD3DX12_CPU_DESCRIPTOR_HANDLE descriptor_handle(
                 rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), i, rtv_increment_size);
@@ -181,6 +206,7 @@ void RenderSystem::InitRaytracingPipeline()
 
         CD3DX12_ROOT_PARAMETER root_entries[RaytracingRootSignature::kNumEntries] = {};
         root_entries[RaytracingRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
+        root_entries[RaytracingRootSignature::kCameraBuffer].InitAsConstantBufferView(1);
         root_entries[RaytracingRootSignature::kAccelerationStructure].InitAsShaderResourceView(0);
         root_entries[RaytracingRootSignature::kOutput].InitAsDescriptorTable(1, &range);
 
@@ -242,7 +268,7 @@ void RenderSystem::InitRaytracingPipeline()
         uint32_t increment_size =
             dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-        for (uint32_t i = 0; i < kBackbufferCount; ++i)
+        for (uint32_t i = 0; i < kNumGPUFramesInFlight; ++i)
         {
             CD3DX12_CPU_DESCRIPTOR_HANDLE cpu_uav_handle(
                 uav_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), i, increment_size);
@@ -282,12 +308,12 @@ void RenderSystem::InitRaytracingPipeline()
     }
 }
 
-void RenderSystem::Raytrace(ID3D12Resource* scene)
+void RenderSystem::Raytrace(ID3D12Resource* scene, ID3D12Resource* camera)
 {
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     raytracing_command_list_->QueryInterface(IID_PPV_ARGS(&cmdlist4));
 
-    cmdlist4->Reset(gpu_frame_data_[backbuffer_index_].command_allocator.Get(), nullptr);
+    cmdlist4->Reset(gpu_frame_data_[current_gpu_frame_index_].command_allocator.Get(), nullptr);
 
     ID3D12DescriptorHeap* desc_heaps[] = {uav_descriptor_heap_.Get()};
 
@@ -295,12 +321,13 @@ void RenderSystem::Raytrace(ID3D12Resource* scene)
     cmdlist4->SetComputeRootSignature(raytracing_root_signature_.Get());
     cmdlist4->SetComputeRootShaderResourceView(RaytracingRootSignature::kAccelerationStructure,
                                                scene->GetGPUVirtualAddress());
+    cmdlist4->SetComputeRootConstantBufferView(RaytracingRootSignature::kCameraBuffer, camera->GetGPUVirtualAddress());
 
     uint32_t increment_size =
         dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpu_uav_handle(
-        uav_descriptor_heap_->GetGPUDescriptorHandleForHeapStart(), backbuffer_index_, increment_size);
+        uav_descriptor_heap_->GetGPUDescriptorHandleForHeapStart(), current_gpu_frame_index_, increment_size);
 
     cmdlist4->SetComputeRootDescriptorTable(RaytracingRootSignature::kOutput, gpu_uav_handle);
 
@@ -320,18 +347,16 @@ void RenderSystem::Raytrace(ID3D12Resource* scene)
     cmdlist4->SetPipelineState1(raytracing_pipeline_state_.Get());
     cmdlist4->DispatchRays(&dispatch_desc);
 
-    cmdlist4->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(raytracing_outputs_[backbuffer_index_].Get()));
+    cmdlist4->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(raytracing_outputs_[current_gpu_frame_index_].Get()));
     cmdlist4->Close();
-
-    ID3D12CommandList* to_submit[] = {cmdlist4.Get()};
-    dx12api().command_queue()->ExecuteCommandLists(1, to_submit);
+    PushCommandList(cmdlist4.Get());
 }
 
 void RenderSystem::Render(float time)
 {
     Constants constants{window_width_, window_height_, time, 0};
 
-    GPUFrameData& gpu_frame_data = gpu_frame_data_[backbuffer_index_];
+    GPUFrameData& gpu_frame_data = gpu_frame_data_[current_gpu_frame_index_];
 
     ID3D12GraphicsCommandList* command_list = command_list_.Get();
 
@@ -339,22 +364,23 @@ void RenderSystem::Render(float time)
 
     UINT rtv_increment_size = dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtv_gpu_handle(
-        rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), backbuffer_index_, rtv_increment_size);
+        rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), current_gpu_frame_index_, rtv_increment_size);
 
+    // Resource transitions.
     {
         D3D12_RESOURCE_BARRIER transitions[2] = {
             // Backbuffer transition to render target.
-            CD3DX12_RESOURCE_BARRIER::Transition(backbuffers_[backbuffer_index_].Get(),
+            CD3DX12_RESOURCE_BARRIER::Transition(backbuffers_[current_gpu_frame_index_].Get(),
                                                  D3D12_RESOURCE_STATE_PRESENT,
                                                  D3D12_RESOURCE_STATE_RENDER_TARGET),
             // Raytraced image transition UAV to SRV.
-            CD3DX12_RESOURCE_BARRIER::Transition(raytracing_outputs_[backbuffer_index_].Get(),
+            CD3DX12_RESOURCE_BARRIER::Transition(raytracing_outputs_[current_gpu_frame_index_].Get(),
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
                                                  D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
 
         };
 
-        command_list->ResourceBarrier(2, transitions);
+        command_list->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     }
 
     ID3D12DescriptorHeap* descriptor_heaps[] = {srv_descriptor_heap_.Get()};
@@ -367,7 +393,7 @@ void RenderSystem::Render(float time)
     uint32_t increment_size =
         dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpu_srv_handle(
-        srv_descriptor_heap_->GetGPUDescriptorHandleForHeapStart(), backbuffer_index_, increment_size);
+        srv_descriptor_heap_->GetGPUDescriptorHandleForHeapStart(), current_gpu_frame_index_, increment_size);
 
     command_list->SetGraphicsRootDescriptorTable(MainRootSignature::kRaytracedTexture, gpu_srv_handle);
 
@@ -383,37 +409,69 @@ void RenderSystem::Render(float time)
     command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     command_list->DrawInstanced(3, 1, 0, 0);
 
+    // Resource transitions.
     {
         D3D12_RESOURCE_BARRIER transitions[2] = {
             // Backbuffer transition to render target.
-            CD3DX12_RESOURCE_BARRIER::Transition(backbuffers_[backbuffer_index_].Get(),
+            CD3DX12_RESOURCE_BARRIER::Transition(backbuffers_[current_gpu_frame_index_].Get(),
                                                  D3D12_RESOURCE_STATE_RENDER_TARGET,
                                                  D3D12_RESOURCE_STATE_PRESENT),
             // Raytraced image transition UAV to SRV.
-            CD3DX12_RESOURCE_BARRIER::Transition(raytracing_outputs_[backbuffer_index_].Get(),
+            CD3DX12_RESOURCE_BARRIER::Transition(raytracing_outputs_[current_gpu_frame_index_].Get(),
                                                  D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+                                                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS)};
 
-        };
-
-        command_list->ResourceBarrier(2, transitions);
+        command_list->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     }
 
     command_list->Close();
-
-    ID3D12CommandList* to_submit[] = {command_list};
-    dx12api().command_queue()->ExecuteCommandLists(1, to_submit);
-}  // namespace capsaicin
+    PushCommandList(command_list);
+}
 
 void RenderSystem::WaitForGPUFrame(uint32_t index)
 {
-    if (frame_submission_fence_->GetCompletedValue() < gpu_frame_data_[index].submission_id)
+    auto fence_value = frame_submission_fence_->GetCompletedValue();
+
+    if (fence_value < gpu_frame_data_[index].submission_id)
     {
         frame_submission_fence_->SetEventOnCompletion(gpu_frame_data_[index].submission_id, win32_event_);
         WaitForSingleObject(win32_event_, INFINITE);
     }
 
+    // Reset command allocator for the frame.
     ThrowIfFailed(gpu_frame_data_[index].command_allocator->Reset(), "Command allocator reset failed");
+
+    if (!gpu_frame_data_[index].autorelease_pool.empty())
+    {
+        info("Releasing {} autorelease resources", gpu_frame_data_[index].autorelease_pool.size());
+        // Release resources.
+        gpu_frame_data_[index].autorelease_pool.clear();
+    }
 }
+void RenderSystem::ExecuteCommandLists(uint32_t index)
+{
+    auto num_command_lists = gpu_frame_data_[index].num_command_lists.load();
+    dx12api().command_queue()->ExecuteCommandLists(num_command_lists, gpu_frame_data_[index].command_lists.data());
+    gpu_frame_data_[index].num_command_lists = 0;
+}
+
+void RenderSystem::AddAutoreleaseResource(ComPtr<ID3D12Resource> resource)
+{
+    gpu_frame_data_[current_gpu_frame_index()].autorelease_pool.push_back(resource);
+}
+
+void RenderSystem::PushCommandList(ID3D12CommandList* command_list)
+{
+    auto idx = gpu_frame_data_[current_gpu_frame_index()].num_command_lists.fetch_add(1);
+
+    if (idx > kMaxCommandBuffersPerFrame)
+    {
+        error("RenderSystem: Max number of command buffer exceeded");
+        throw std::runtime_error("RenderSystem: Max number of command buffer exceeded");
+    }
+
+    gpu_frame_data_[current_gpu_frame_index()].command_lists[idx] = command_list;
+}
+
 
 }  // namespace capsaicin

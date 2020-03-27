@@ -90,6 +90,20 @@ ComPtr<ID3D12Resource> Dx12::CreateUAVBuffer(UINT64 size, D3D12_RESOURCE_STATES 
     return resource;
 }
 
+ComPtr<ID3D12Resource> Dx12::CreateConstantBuffer(UINT64 size, D3D12_RESOURCE_STATES initial_state)
+{
+    ComPtr<ID3D12Resource> resource = nullptr;
+    auto heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    auto buffer_desc = CD3DX12_RESOURCE_DESC::Buffer(size, D3D12_RESOURCE_FLAG_NONE);
+
+    ThrowIfFailed(
+        device()->CreateCommittedResource(
+            &heap_properties, D3D12_HEAP_FLAG_NONE, &buffer_desc, initial_state, nullptr, IID_PPV_ARGS(&resource)),
+        "Cannot create CBV");
+
+    return resource;
+}
+
 ComPtr<ID3D12DescriptorHeap> Dx12::CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type, UINT descriptor_count, D3D12_DESCRIPTOR_HEAP_FLAGS flags)
 {
     ComPtr<ID3D12DescriptorHeap> heap;
@@ -137,7 +151,7 @@ void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)
         dxgi_info_queue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true);
     }
 #else
-    ThrowIfFailed(CreateDXGIFactory2(IID_PPV_ARGS(&dxgi_factory_)), "Cannot create DXGI factory");
+    ThrowIfFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory_)), "Cannot create DXGI factory");
 #endif
 
     // Now try to find the adapter.
