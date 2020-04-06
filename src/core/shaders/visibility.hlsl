@@ -2,7 +2,10 @@ typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 
 struct Constants
 {
-    float something;
+    uint width;
+    uint height;
+    uint frame_count;
+    uint padding;
 };
 
 struct Camera
@@ -31,15 +34,22 @@ struct RayPayload
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 RaytracingAccelerationStructure g_scene : register(t0);
+Texture2D<uint4> g_blue_noise: register(t1);
 RWTexture2D<float4> g_output : register(u0);
 RWBuffer<uint> g_index_buffer : register(u1);
 RWBuffer<float> g_vertex_buffer : register(u2);
 RWBuffer<float> g_normal_buffer : register(u3);
 RWBuffer<float2> g_texcoord_buffer : register(u4);
 
+float2 Sample2D_BlueNoise(in uint2 xy)
+{
+    float2 value =  float2(g_blue_noise.Load(int3(xy % 256, 0)).xy) / 255.f;
+    return frac(value + 0.61803398875f * (g_constants.frame_count % 64));
+}
+
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
-    float2 s = float2(0.5f, 0.5f);
+    float2 s = Sample2D_BlueNoise(xy);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);

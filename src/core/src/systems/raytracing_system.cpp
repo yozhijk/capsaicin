@@ -5,6 +5,9 @@
 #include "src/systems/camera_system.h"
 #include "src/systems/tlas_system.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "src/utils/stb_image.h"
+
 namespace capsaicin
 {
 namespace
@@ -17,6 +20,7 @@ enum
     kConstants = 0,
     kCameraBuffer,
     kAccelerationStructure,
+    kBlueNoiseTexture,
     kSceneData,
     kOutput,
     kNumEntries
@@ -28,7 +32,7 @@ struct Constants
 {
     uint32_t width;
     uint32_t height;
-    float rotation;
+    uint32_t frame_count;
     uint32_t padding;
 };
 
@@ -75,6 +79,7 @@ RaytracingSystem::RaytracingSystem()
 
     // Initialize raytracing pipeline.
     InitPipeline();
+    LoadBlueNoiseTextures();
 }
 
 RaytracingSystem::~RaytracingSystem() = default;
@@ -93,8 +98,9 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
 
     auto scene_data_base_index = PopulateSceneDataDescriptorTable(scene_data);
     auto output_uav_index = PopulateOutputDescriptorTable();
+    auto internal_descriptor_table = PopulateInternalDataDescritptorTable();
 
-    Raytrace(tlas.tlas.Get(), GetCamera(access, entity_query), scene_data_base_index, output_uav_index);
+    Raytrace(tlas.tlas.Get(), GetCamera(access, entity_query), scene_data_base_index, internal_descriptor_table ,output_uav_index);
 }
 
 ID3D12Resource* RaytracingSystem::current_frame_output()
@@ -122,10 +128,14 @@ void RaytracingSystem::InitPipeline()
         CD3DX12_DESCRIPTOR_RANGE scene_data_descriptor_range;
         scene_data_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 1);
 
+        CD3DX12_DESCRIPTOR_RANGE blue_noise_texture_descriptor_range;
+        blue_noise_texture_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+
         CD3DX12_ROOT_PARAMETER root_entries[RaytracingRootSignature::kNumEntries] = {};
         root_entries[RaytracingRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
         root_entries[RaytracingRootSignature::kCameraBuffer].InitAsConstantBufferView(1);
         root_entries[RaytracingRootSignature::kAccelerationStructure].InitAsShaderResourceView(0);
+        root_entries[RaytracingRootSignature::kBlueNoiseTexture].InitAsDescriptorTable(1, &blue_noise_texture_descriptor_range);
         root_entries[RaytracingRootSignature::kSceneData].InitAsDescriptorTable(1, &scene_data_descriptor_range);
         root_entries[RaytracingRootSignature::kOutput].InitAsDescriptorTable(1, &output_descriptor_range);
 
@@ -200,12 +210,88 @@ void RaytracingSystem::InitPipeline()
             raytracing_outputs_[i] = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
+
+        // History data.
+        auto texture_desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R16G16B16A16_FLOAT,
+                                                         window_width,
+                                                         window_height,
+                                                         1,
+                                                         0,
+                                                         1,
+                                                         0,
+                                                         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+        raytracing_outputs_[i] = dx12api().CreateResource(
+            texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
     }
+}
+
+void RaytracingSystem::LoadBlueNoiseTextures()
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+
+    // Load 256x256 blue-noise tile.
+    int res_x, res_y;
+    int channels;
+    auto* data = stbi_load("../../../assets/textures/bluenoise256.png", &res_x, &res_y, &channels, 4);
+
+    // Create texture in default heap.
+    CD3DX12_RESOURCE_DESC texture_desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UINT, res_x, res_y);
+    blue_noise_texture_ = dx12api().CreateResource(
+        texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_COPY_DEST);
+
+    D3D12_SUBRESOURCE_FOOTPRINT pitched_desc = {};
+    pitched_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pitched_desc.Width = res_x;
+    pitched_desc.Height = res_y;
+    pitched_desc.Depth = 1;
+    pitched_desc.RowPitch = align(res_x * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
+    auto upload_buffer = dx12api().CreateUploadBuffer(pitched_desc.Width * pitched_desc.RowPitch);
+    render_system.AddAutoreleaseResource(upload_buffer);
+
+    char* mapped_data = nullptr;
+    upload_buffer->Map(0, nullptr, (void**)&mapped_data);
+    for (auto row = 0; row < res_y; ++row)
+    {
+        memcpy(mapped_data, data, res_x * sizeof(DWORD));
+        mapped_data += pitched_desc.RowPitch;
+        data += res_x * sizeof(DWORD);
+    }
+    upload_buffer->Unmap(0, nullptr);
+
+    D3D12_TEXTURE_COPY_LOCATION src_texture_loc;
+    src_texture_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src_texture_loc.PlacedFootprint.Offset = 0;
+    src_texture_loc.PlacedFootprint.Footprint = pitched_desc;
+    src_texture_loc.pResource = upload_buffer.Get();
+
+    D3D12_TEXTURE_COPY_LOCATION dst_texture_loc;
+    dst_texture_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst_texture_loc.pResource = blue_noise_texture_.Get();
+    dst_texture_loc.SubresourceIndex = 0;
+
+    D3D12_BOX copy_box{0, 0, 0, res_x, res_y, 1};
+
+    auto command_allocator = render_system.current_frame_command_allocator();
+    upload_command_list_ = dx12api().CreateCommandList(command_allocator);
+
+    upload_command_list_->CopyTextureRegion(&dst_texture_loc, 0, 0, 0, &src_texture_loc, &copy_box);
+    D3D12_RESOURCE_BARRIER transitions[] = {
+        // Backbuffer transition to render target.
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            blue_noise_texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
+    upload_command_list_->ResourceBarrier(ARRAYSIZE(transitions), transitions);
+    upload_command_list_->Close();
+
+    render_system.PushCommandList(upload_command_list_.Get());
 }
 
 void RaytracingSystem::Raytrace(ID3D12Resource* scene,
                                 ID3D12Resource* camera,
                                 uint32_t scene_data_base_index,
+                                uint32_t internal_descriptor_table,
                                 uint32_t output_uav_index)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
@@ -214,6 +300,8 @@ void RaytracingSystem::Raytrace(ID3D12Resource* scene,
     auto command_allocator = render_system.current_frame_command_allocator();
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
     auto current_gpu_frame_index = render_system.current_gpu_frame_index();
+
+    Constants constants{render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0};
 
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     raytracing_command_list_->QueryInterface(IID_PPV_ARGS(&cmdlist4));
@@ -224,8 +312,11 @@ void RaytracingSystem::Raytrace(ID3D12Resource* scene,
 
     cmdlist4->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
     cmdlist4->SetComputeRootSignature(raytracing_root_signature_.Get());
+    cmdlist4->SetComputeRoot32BitConstants(RaytracingRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     cmdlist4->SetComputeRootShaderResourceView(RaytracingRootSignature::kAccelerationStructure,
                                                scene->GetGPUVirtualAddress());
+    cmdlist4->SetComputeRootDescriptorTable(RaytracingRootSignature::kBlueNoiseTexture,
+                                            render_system.GetDescriptorHandleGPU(internal_descriptor_table));
     cmdlist4->SetComputeRootConstantBufferView(RaytracingRootSignature::kCameraBuffer, camera->GetGPUVirtualAddress());
     cmdlist4->SetComputeRootDescriptorTable(RaytracingRootSignature::kSceneData,
                                             render_system.GetDescriptorHandleGPU(scene_data_base_index));
@@ -304,6 +395,24 @@ uint32_t RaytracingSystem::PopulateOutputDescriptorTable()
                                                   nullptr,
                                                   &uav_desc,
                                                   render_system.GetDescriptorHandleCPU(base_index));
+    return base_index;
+}
+
+uint32_t RaytracingSystem::PopulateInternalDataDescritptorTable()
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto base_index = render_system.AllocateDescriptorRange(1);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
+    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UINT;
+    srv_desc.Texture2D.MipLevels = 1;
+    srv_desc.Texture2D.MostDetailedMip = 0;
+    srv_desc.Texture2D.PlaneSlice = 0;
+    srv_desc.Texture2D.ResourceMinLODClamp = 0;
+    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    dx12api().device()->CreateShaderResourceView(
+        blue_noise_texture(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
     return base_index;
 }
 }  // namespace capsaicin

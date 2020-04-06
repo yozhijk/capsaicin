@@ -4,6 +4,7 @@ add_library(core src/capsaicin.cpp
                  src/dx12/dx12.cpp
                  src/dx12/shader_compiler.cpp
                  src/utils/singleton.h
+                 src/utils/stb_image.h
                  src/systems/render_system.h
                  src/systems/render_system.cpp
                  src/systems/composite_system.h

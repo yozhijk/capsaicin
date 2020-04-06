@@ -51,6 +51,8 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     current_gpu_frame_index_ = swapchain_->GetCurrentBackBufferIndex();
 
     WaitForGPUFrame(current_gpu_frame_index());
+
+    ++frame_count_;
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderSystem::current_frame_output_descriptor_handle()

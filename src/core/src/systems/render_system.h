@@ -35,6 +35,7 @@ public:
     uint32_t window_width() const { return window_width_; }
     uint32_t window_height() const { return window_height_; }
     uint32_t current_gpu_frame_index() const { return current_gpu_frame_index_; }
+    uint32_t frame_count() const { return frame_count_; }
 
     ID3D12CommandAllocator* current_frame_command_allocator();
     ID3D12DescriptorHeap* current_frame_descriptor_heap();
@@ -90,5 +91,11 @@ private:
     uint32_t next_submission_id_ = 1;
     uint32_t uav_descriptor_increment_ = 0;
     uint32_t rtv_descriptor_increment_ = 0;
+
+    uint32_t frame_count_ = 0;
 };
+
+template <typename R>
+using PerGPUFrameResource = std::array<R, RenderSystem::num_gpu_frames_in_flight()>;
+
 }  // namespace capsaicin
