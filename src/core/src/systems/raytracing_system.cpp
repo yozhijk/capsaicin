@@ -185,8 +185,6 @@ void RaytracingSystem::InitPipeline()
 
     {
         info("RaytracingSystem: Initializing raytracing outputs");
-        uint32_t increment_size =
-            dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
         for (uint32_t i = 0; i < RenderSystem::num_gpu_frames_in_flight(); ++i)
         {
@@ -261,7 +259,6 @@ uint32_t RaytracingSystem::PopulateSceneDataDescriptorTable(GPUSceneData& scene_
     auto& render_system = world().GetSystem<RenderSystem>();
 
     auto base_index = render_system.AllocateDescriptorRange(4);
-    auto base_cpu_handle = render_system.GetDescriptorHandleCPU(base_index);
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
     uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
