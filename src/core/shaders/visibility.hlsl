@@ -32,6 +32,10 @@ ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 RaytracingAccelerationStructure g_scene : register(t0);
 RWTexture2D<float4> g_output : register(u0);
+RWBuffer<uint> g_index_buffer : register(u1);
+RWBuffer<float> g_vertex_buffer : register(u2);
+RWBuffer<float> g_normal_buffer : register(u3);
+RWBuffer<float2> g_texcoord_buffer : register(u4);
 
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
@@ -72,7 +76,29 @@ void TraceVisibility()
 [shader("closesthit")]
 void Hit(inout RayPayload payload, in MyAttributes attr)
 {
-    payload.color = attr.barycentrics.xyy;
+    uint prim_index = PrimitiveIndex();
+    uint instance_index = InstanceIndex();
+
+    uint i0 = g_index_buffer[3 * prim_index + 0];
+    uint i1 = g_index_buffer[3 * prim_index + 1];
+    uint i2 = g_index_buffer[3 * prim_index + 2];
+
+    float3 v0 = float3(g_vertex_buffer[3 * i0], g_vertex_buffer[3 * i0 + 1], g_vertex_buffer[3 * i0 + 2]);
+    float3 v1 = float3(g_vertex_buffer[3 * i1], g_vertex_buffer[3 * i1 + 1], g_vertex_buffer[3 * i1 + 2]);
+    float3 v2 = float3(g_vertex_buffer[3 * i2], g_vertex_buffer[3 * i2 + 1], g_vertex_buffer[3 * i2 + 2]);
+
+    float2 t0 = g_texcoord_buffer[i0];
+    float2 t1 = g_texcoord_buffer[i1];
+    float2 t2 = g_texcoord_buffer[i2];
+
+    float3 n0 = float3(g_normal_buffer[3 * i0], g_normal_buffer[3 * i0 + 1], g_normal_buffer[3 * i0 + 2]);
+    float3 n1 = float3(g_normal_buffer[3 * i1], g_normal_buffer[3 * i1 + 1], g_normal_buffer[3 * i1 + 2]);
+    float3 n2 = float3(g_normal_buffer[3 * i2], g_normal_buffer[3 * i2 + 1], g_normal_buffer[3 * i2 + 2]);
+
+    float2 uv = attr.barycentrics.xy;
+    float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
+
+    payload.color = 0.5f * n + 0.5f;// float3(v0);//0.5f * n + 0.5f;
 }
 
 [shader("miss")]

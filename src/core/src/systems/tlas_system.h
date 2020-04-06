@@ -11,6 +11,7 @@ namespace capsaicin
 // Top level acceleration structure for the scene.
 struct TLASComponent
 {
+    // TLAS resource.
     ComPtr<ID3D12Resource> tlas = nullptr;
     bool built = false;
 };

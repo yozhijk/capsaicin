@@ -5,6 +5,8 @@
 #include "systems/asset_load_system.h"
 #include "systems/blas_system.h"
 #include "systems/render_system.h"
+#include "systems/composite_system.h"
+#include "systems/raytracing_system.h"
 #include "systems/tlas_system.h"
 #include "systems/camera_system.h"
 #include "systems/input_system.h"
@@ -45,7 +47,12 @@ void InitRenderSession(void* data)
 
     auto params = reinterpret_cast<RenderSessionParams*>(data);
     world().RegisterSystem<RenderSystem>(params->hwnd);
-    world().Precede<CameraSystem, RenderSystem>();
+    world().RegisterSystem<RaytracingSystem>();
+    world().RegisterSystem<CompositeSystem>();
+
+    world().Precede<CameraSystem, RaytracingSystem>();
+    world().Precede<RaytracingSystem, CompositeSystem>();
+    world().Precede<CompositeSystem, RenderSystem>();
 }
 
 void LoadSceneFromOBJ(const std::string& file_name)

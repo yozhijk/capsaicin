@@ -121,33 +121,57 @@ void CreateGPUBuffers(const MeshData& mesh_data,
         dx12api().CreateUAVBuffer(mesh_data.positions.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
     mesh_component.indices =
         dx12api().CreateUAVBuffer(mesh_data.indices.size() * sizeof(uint32_t), D3D12_RESOURCE_STATE_COPY_DEST);
+    mesh_component.normals =
+        dx12api().CreateUAVBuffer(mesh_data.normals.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
+    mesh_component.texcoords =
+        dx12api().CreateUAVBuffer(mesh_data.texcoords.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
+
 
     // Create upload buffers.
     auto vertex_upload_buffer =
         dx12api().CreateUploadBuffer(mesh_data.positions.size() * sizeof(float), mesh_data.positions.data());
     auto index_upload_buffer =
         dx12api().CreateUploadBuffer(mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
+    auto normals_upload_buffer =
+        dx12api().CreateUploadBuffer(mesh_data.normals.size() * sizeof(float), mesh_data.normals.data());
+    auto texcoord_upload_buffer =
+        dx12api().CreateUploadBuffer(mesh_data.texcoords.size() * sizeof(float), mesh_data.texcoords.data());
+
 
     render_system.AddAutoreleaseResource(vertex_upload_buffer);
     render_system.AddAutoreleaseResource(index_upload_buffer);
+    render_system.AddAutoreleaseResource(normals_upload_buffer);
+    render_system.AddAutoreleaseResource(texcoord_upload_buffer);
 
     // Transitions for mesh buffes to non pixel shader resource.
-    D3D12_RESOURCE_BARRIER copy_dest_to_uav[2] = {
+    D3D12_RESOURCE_BARRIER copy_dest_to_uav[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.vertices.Get(),
                                              D3D12_RESOURCE_STATE_COPY_DEST,
                                              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
         CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.indices.Get(),
                                              D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.normals.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.texcoords.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+    };
 
     // Copy data.
     command_list->CopyBufferRegion(
         mesh_component.vertices.Get(), 0, vertex_upload_buffer.Get(), 0, mesh_data.positions.size() * sizeof(float));
     command_list->CopyBufferRegion(
         mesh_component.indices.Get(), 0, index_upload_buffer.Get(), 0, mesh_data.indices.size() * sizeof(uint32_t));
+    command_list->CopyBufferRegion(
+        mesh_component.normals.Get(), 0, normals_upload_buffer.Get(), 0, mesh_data.normals.size() * sizeof(float));
+    command_list->CopyBufferRegion(
+        mesh_component.texcoords.Get(), 0, texcoord_upload_buffer.Get(), 0, mesh_data.texcoords.size() * sizeof(float));
+
 
     // Transition to UAV.
-    command_list->ResourceBarrier(2, &copy_dest_to_uav[0]);
+    command_list->ResourceBarrier(ARRAYSIZE(copy_dest_to_uav), copy_dest_to_uav);
 }
 }  // namespace
 

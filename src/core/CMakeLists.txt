@@ -6,6 +6,10 @@ add_library(core src/capsaicin.cpp
                  src/utils/singleton.h
                  src/systems/render_system.h
                  src/systems/render_system.cpp
+                 src/systems/composite_system.h
+                 src/systems/composite_system.cpp
+                 src/systems/raytracing_system.h
+                 src/systems/raytracing_system.cpp
                  src/systems/blas_system.h
                  src/systems/blas_system.cpp
                  src/systems/tlas_system.h

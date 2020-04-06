@@ -33,4 +33,4 @@ public:
 private:
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
 };
-}  // namespace capsaicin
+}  // namespace capsaicins

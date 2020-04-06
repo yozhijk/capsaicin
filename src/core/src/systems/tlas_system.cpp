@@ -1,5 +1,6 @@
 #include "tlas_system.h"
 
+#include "src/systems/asset_load_system.h"
 #include "src/systems/blas_system.h"
 #include "src/systems/render_system.h"
 
@@ -83,6 +84,7 @@ void TLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Sub
 
     auto& tlases = access.Write<TLASComponent>();
     auto& blases = access.Read<BLASComponent>();
+    auto& meshes = access.Read<MeshComponent>();
 
     auto entities = entity_query().Filter([&tlases](Entity e) { return tlases.HasComponent(e); }).entities();
 
@@ -102,8 +104,8 @@ void TLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Sub
 
         info("TLASSystem: Building TLAS");
         BuildTLAS(entities_with_blas, tlas, build_command_list_.Get(), render_system);
-        tlas.built = true;
 
+        tlas.built = true;
         build_command_list_->Close();
         render_system.PushCommandList(build_command_list_.Get());
     }
