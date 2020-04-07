@@ -41,7 +41,7 @@ void InputSystem::HandleKeyboard(CameraData& camera_data, float dt)
     auto keyboard_state = keyboard_.GetState();
 
     XMFLOAT3 movement{0.f, 0.f, 0.f};
-    constexpr float kMovementSpeed = 0.05f;
+    constexpr float kMovementSpeed = 0.025f;
 
     if (keyboard_state.IsKeyDown(Keyboard::A))
     {

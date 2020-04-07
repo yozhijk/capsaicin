@@ -127,7 +127,14 @@ void RenderSystem::WaitForGPUFrame(uint32_t index)
 void RenderSystem::ExecuteCommandLists(uint32_t index)
 {
     auto num_command_lists = gpu_frame_data_[index].num_command_lists.load();
-    dx12api().command_queue()->ExecuteCommandLists(num_command_lists, gpu_frame_data_[index].command_lists.data());
+
+    std::vector<ID3D12CommandList*> command_lists(num_command_lists);
+    std::transform(gpu_frame_data_[index].command_lists.cbegin(),
+                   gpu_frame_data_[index].command_lists.cbegin() + num_command_lists,
+                   command_lists.begin(),
+                   [](ComPtr<ID3D12CommandList> cmd_list) { return cmd_list.Get(); });
+
+    dx12api().command_queue()->ExecuteCommandLists(num_command_lists, command_lists.data());
     gpu_frame_data_[index].num_command_lists = 0;
 }
 
@@ -169,7 +176,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderSystem::GetDescriptorHandleGPU(uint32_t index)
     return handle;
 }
 
-void RenderSystem::PushCommandList(ID3D12CommandList* command_list)
+void RenderSystem::PushCommandList(ComPtr<ID3D12CommandList> command_list)
 {
     auto idx = gpu_frame_data_[current_gpu_frame_index()].num_command_lists.fetch_add(1);
 

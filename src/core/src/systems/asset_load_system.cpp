@@ -220,7 +220,7 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         }
 
         upload_command_list_->Close();
-        render_system.PushCommandList(upload_command_list_.Get());
+        render_system.PushCommandList(upload_command_list_);
     }
 }
 }  // namespace capsaicin

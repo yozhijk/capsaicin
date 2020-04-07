@@ -36,6 +36,7 @@ struct CameraComponent
 {
     CameraData camera_data;
     ComPtr<ID3D12Resource> camera_buffer = nullptr;
+    ComPtr<ID3D12Resource> prev_camera_buffer = nullptr;
 };
 
 class CameraSystem : public System

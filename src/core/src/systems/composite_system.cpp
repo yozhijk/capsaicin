@@ -119,9 +119,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
     auto command_allocator = world().GetSystem<RenderSystem>().current_frame_command_allocator();
 
-    ID3D12GraphicsCommandList* command_list = command_list_.Get();
-
-    command_list->Reset(command_allocator, nullptr);
+    command_list_->Reset(command_allocator, nullptr);
 
     auto rtv_handle = render_system.current_frame_output_descriptor_handle();
     auto backbuffer = render_system.current_frame_output();
@@ -141,29 +139,29 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
         };
 
-        command_list->ResourceBarrier(ARRAYSIZE(transitions), transitions);
+        command_list_->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     }
 
     ID3D12DescriptorHeap* descriptor_heaps[] = {render_system.current_frame_descriptor_heap()};
 
-    command_list->SetGraphicsRootSignature(root_signature_.Get());
-    command_list->SetDescriptorHeaps(ARRAYSIZE(descriptor_heaps), descriptor_heaps);
-    command_list->SetGraphicsRoot32BitConstants(RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
-    command_list->SetPipelineState(pipeline_state_.Get());
-    command_list->SetGraphicsRootDescriptorTable(RootSignature::kRaytracedTexture,
+    command_list_->SetGraphicsRootSignature(root_signature_.Get());
+    command_list_->SetDescriptorHeaps(ARRAYSIZE(descriptor_heaps), descriptor_heaps);
+    command_list_->SetGraphicsRoot32BitConstants(RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
+    command_list_->SetPipelineState(pipeline_state_.Get());
+    command_list_->SetGraphicsRootDescriptorTable(RootSignature::kRaytracedTexture,
                                                  render_system.GetDescriptorHandleGPU(output_srv_index));
 
     D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width), static_cast<float>(window_height)};
     D3D12_RECT scissor_rect{0, 0, static_cast<LONG>(window_width), static_cast<LONG>(window_height)};
-    command_list->RSSetViewports(1, &viewport);
-    command_list->RSSetScissorRects(1, &scissor_rect);
-    command_list->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
+    command_list_->RSSetViewports(1, &viewport);
+    command_list_->RSSetScissorRects(1, &scissor_rect);
+    command_list_->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
 
     FLOAT shitty_red[] = {0.77f, 0.15f, 0.1f, 1.f};
-    command_list->ClearRenderTargetView(rtv_handle, shitty_red, 0, nullptr);
+    command_list_->ClearRenderTargetView(rtv_handle, shitty_red, 0, nullptr);
 
-    command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    command_list->DrawInstanced(3, 1, 0, 0);
+    command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    command_list_->DrawInstanced(3, 1, 0, 0);
 
     // Resource transitions.
     {
@@ -177,10 +175,10 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
                                                  D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS)};
 
-        command_list->ResourceBarrier(ARRAYSIZE(transitions), transitions);
+        command_list_->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     }
 
-    command_list->Close();
-    render_system.PushCommandList(command_list);
+    command_list_->Close();
+    render_system.PushCommandList(command_list_);
 }
 }  // namespace capsaicin

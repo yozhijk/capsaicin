@@ -34,6 +34,8 @@ CameraSystem::CameraSystem()
 
     camera_component.camera_buffer =
         dx12api().CreateConstantBuffer(structure_size, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    camera_component.prev_camera_buffer =
+        dx12api().CreateConstantBuffer(structure_size, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
     camera_staging_buffer_ = dx12api().CreateUploadBuffer(RenderSystem::num_gpu_frames_in_flight() * structure_size);
 }
@@ -74,15 +76,33 @@ void CameraSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     memcpy(data + idx * structure_size, &camera.camera_data, sizeof(camera.camera_data));
     staging_buffer->Unmap(0, &range);
 
-    // Copy command list.
-    // Resource transition.
+    // Copy current camera to prev buffer.
     {
-        D3D12_RESOURCE_BARRIER transition =
+        D3D12_RESOURCE_BARRIER transitions[] = {
             CD3DX12_RESOURCE_BARRIER::Transition(camera.camera_buffer.Get(),
                                                  D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
-                                                 D3D12_RESOURCE_STATE_COPY_DEST);
+                                                 D3D12_RESOURCE_STATE_COPY_SOURCE),
+            CD3DX12_RESOURCE_BARRIER::Transition(camera.prev_camera_buffer.Get(),
+                                                 D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER,
+                                                 D3D12_RESOURCE_STATE_COPY_DEST)};
 
-        upload_command_list_->ResourceBarrier(1, &transition);
+        upload_command_list_->ResourceBarrier(ARRAYSIZE(transitions), transitions);
+    }
+
+    // Copy old camera.
+    upload_command_list_->CopyBufferRegion(
+        camera.prev_camera_buffer.Get(), 0, camera.camera_buffer.Get(), 0, sizeof(CameraData));
+
+    // Resource transition.
+    {
+        D3D12_RESOURCE_BARRIER transitions[] = {
+            CD3DX12_RESOURCE_BARRIER::Transition(
+                camera.camera_buffer.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COPY_DEST),
+            CD3DX12_RESOURCE_BARRIER::Transition(camera.prev_camera_buffer.Get(),
+                                                 D3D12_RESOURCE_STATE_COPY_DEST,
+                                                 D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER)};
+
+        upload_command_list_->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     }
 
     // Copy staging to constant.
@@ -100,6 +120,6 @@ void CameraSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     }
 
     upload_command_list_->Close();
-    render_system.PushCommandList(upload_command_list_.Get());
+    render_system.PushCommandList(upload_command_list_);
 }
 }  // namespace capsaicin

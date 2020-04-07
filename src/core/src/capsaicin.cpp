@@ -10,6 +10,7 @@
 #include "systems/tlas_system.h"
 #include "systems/camera_system.h"
 #include "systems/input_system.h"
+#include "systems/texture_system.h"
 #include "utils/singleton.h"
 #include "yecs/yecs.h"
 
@@ -31,6 +32,7 @@ void Init()
     world().RegisterSystem<TLASSystem>();
     world().RegisterSystem<CameraSystem>();
     world().RegisterSystem<InputSystem>();
+    world().RegisterSystem<TextureSystem>();
 
     // TODO: enable parallel execution.
     // Currently each system is taking care of work submission, 
@@ -39,6 +41,7 @@ void Init()
     world().Precede<BLASSystem, TLASSystem>();
     world().Precede<TLASSystem, CameraSystem>();
     world().Precede<InputSystem, CameraSystem>();
+    world().Precede<InputSystem, TextureSystem>();
 }
 
 void InitRenderSession(void* data)
@@ -50,6 +53,7 @@ void InitRenderSession(void* data)
     world().RegisterSystem<RaytracingSystem>();
     world().RegisterSystem<CompositeSystem>();
 
+    world().Precede<TextureSystem, CameraSystem>();
     world().Precede<CameraSystem, RaytracingSystem>();
     world().Precede<RaytracingSystem, CompositeSystem>();
     world().Precede<CompositeSystem, RenderSystem>();

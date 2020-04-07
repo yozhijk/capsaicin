@@ -18,7 +18,7 @@ public:
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
     // Push command list for execution.
-    void PushCommandList(ID3D12CommandList* command_list);
+    void PushCommandList(ComPtr<ID3D12CommandList> command_list);
     // Add resource to the autorealease pool, it will be freed
     // when all command buffers are finished execution for the current GPU frame.
     void AddAutoreleaseResource(ComPtr<ID3D12Resource> resource);
@@ -63,7 +63,7 @@ private:
     {
         ComPtr<ID3D12CommandAllocator> command_allocator = nullptr;
         ComPtr<ID3D12DescriptorHeap> descriptor_heap = nullptr;
-        std::array<ID3D12CommandList*, kMaxCommandBuffersPerFrame> command_lists = {nullptr};
+        std::array<ComPtr<ID3D12CommandList>, kMaxCommandBuffersPerFrame> command_lists = {nullptr};
         std::atomic_uint32_t num_command_lists = 0;
         std::atomic_uint32_t num_descriptors = 0;
         uint64_t submission_id = 0;

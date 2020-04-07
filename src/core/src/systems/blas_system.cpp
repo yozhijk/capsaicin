@@ -96,7 +96,7 @@ void BLASSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Sub
         }
 
         build_command_list_->Close();
-        render_system.PushCommandList(build_command_list_.Get());
+        render_system.PushCommandList(build_command_list_);
     }
 }
 }  // namespace capsaicin

@@ -1,3 +1,5 @@
+#include "camera.h"
+
 typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 
 struct Constants
@@ -8,48 +10,43 @@ struct Constants
     uint padding;
 };
 
-struct Camera
-{
-    float3 position;
-    float focal_length;
-
-    float3 right;
-    float znear;
-
-    float3 forward;
-    float focus_distance;
-
-    float3 up;
-    float aperture;
-
-    float2 sensor_size;
-};
-
 struct RayPayload
 {
     float3 color;
-    uint padding;
+    float3 normal;
+    float depth;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 RaytracingAccelerationStructure g_scene : register(t0);
 Texture2D<uint4> g_blue_noise: register(t1);
-RWTexture2D<float4> g_output : register(u0);
-RWBuffer<uint> g_index_buffer : register(u1);
-RWBuffer<float> g_vertex_buffer : register(u2);
-RWBuffer<float> g_normal_buffer : register(u3);
-RWBuffer<float2> g_texcoord_buffer : register(u4);
+RWBuffer<uint> g_index_buffer : register(u0);
+RWBuffer<float> g_vertex_buffer : register(u1);
+RWBuffer<float> g_normal_buffer : register(u2);
+RWBuffer<float2> g_texcoord_buffer : register(u3);
+RWTexture2D<float4> g_output_color : register(u4);
+RWTexture2D<float4> g_output_gbuffer : register(u5);
+
+#define kAACellDim 4
+#define kAACellSize (kAACellDim * kAACellDim)
+
+float2 Sample2D_StableSubpixelBlueNoise()
+{
+    uint x = (g_constants.frame_count % kAACellSize) % kAACellDim;
+    uint y = (g_constants.frame_count % kAACellSize) / kAACellDim;
+    return float2(g_blue_noise.Load(int3(x, y, 0)).xy) / 255.f;
+}
 
 float2 Sample2D_BlueNoise(in uint2 xy)
 {
     float2 value =  float2(g_blue_noise.Load(int3(xy % 256, 0)).xy) / 255.f;
-    return frac(value + 0.61803398875f * (g_constants.frame_count % 64));
+    return frac(value + 0.61803398875f * (g_constants.frame_count % kAACellSize));
 }
 
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
-    float2 s = Sample2D_BlueNoise(xy);
+    float2 s = Sample2D_StableSubpixelBlueNoise();
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);
@@ -78,9 +75,8 @@ void TraceVisibility()
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 0, 0, 0, ray, payload);
 
     uint2 output_xy = DispatchRaysIndex();
-    output_xy.y = DispatchRaysDimensions().y - output_xy.y;
-
-    g_output[output_xy] = float4(payload.color, 1.f);
+    g_output_color[output_xy] = float4(payload.color, 1.f);
+    g_output_gbuffer[output_xy] = float4(payload.normal, payload.depth);
 }
 
 [shader("closesthit")]
@@ -107,12 +103,17 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
 
     float2 uv = attr.barycentrics.xy;
     float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
+    float3 v = v0 * (1.f - uv.x - uv.y) + v1 * uv.x + v2 * uv.y;
 
     payload.color = 0.5f * n + 0.5f;// float3(v0);//0.5f * n + 0.5f;
+    payload.normal = n;
+    payload.depth = length(v - g_camera.position);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-    payload.color = float3(0.5f, 0.1f, 0.1f);
+    payload.color = float3(0.0f, 0.0f, 0.f);
+    payload.normal = float3(0.f, 0.f, 0.f);
+    payload.depth = 0.f;
 }
