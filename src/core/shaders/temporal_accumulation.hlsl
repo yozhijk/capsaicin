@@ -79,7 +79,7 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
 {
     float3 filtered = float3(0.f, 0.f, 0.f);
     int2 center_xy = uxy;
-    float2 f_center_pos = float2(center_xy) + Sample2D_BlueNoise4x4Stable(g_blue_noise, center_xy, g_constants.frame_count - 1);
+    float2 f_center_pos = float2(center_xy) + 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, center_xy, g_constants.frame_count - 1);
     float tw = 0.f;
 
     // 3x3 bicubic filter.
@@ -95,7 +95,7 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
                 float3 value = texture.Load(int3(current_xy, 0)).xyz;
 
                 // Use blue-noise sample position from previous frame.
-                float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, current_xy, g_constants.frame_count - 1);
+                float2 s = 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, current_xy, g_constants.frame_count - 1);
                 float2 f_current_pos = float2(current_xy) + s;
 
 
@@ -144,11 +144,11 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
 
-        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.1f)
-        // {
-        //     g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
-        //     return;
-        // }
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
+        {
+            g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
+            return;
+        }
 
         float velocity_adjustment = g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.9, speed/0.1f)) : 0.f;
         float alpha = g_constants.alpha - velocity_adjustment;

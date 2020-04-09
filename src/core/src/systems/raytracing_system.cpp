@@ -197,13 +197,13 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
     CombineIllumination(output_descritor_table);
 
     // TAA
-     IntegrateTemporally(camera.camera_buffer.Get(),
+    IntegrateTemporally(camera.camera_buffer.Get(),
                         camera.prev_camera_buffer.Get(),
                         internal_descriptor_table,
                         indirect_ta_input_descritor_table,
                         combined_history_descriptor_table,
                         combined_ta_command_list_,
-                        0.8f,
+                        0.9f,
                         true);
 }
 

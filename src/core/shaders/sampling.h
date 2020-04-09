@@ -19,7 +19,7 @@ float2 Sample2D_BlueNoise4x4(in Texture2D<uint4> texture, in uint2 xy, in uint c
 
     // 256 is blue-noise texture size.
     float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy) / 255.f;
-    return frac(value + 0.61803398875f * (count % 16));
+    return frac(value + 0.61803398875f * (count / 16));
 }
 
 uint WangHash(in uint2 xy)
