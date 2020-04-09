@@ -40,7 +40,7 @@ RWTexture2D<float4> g_output_gbuffer : register(u6);
 
 float3 CalculateDirectIllumination(float3 v, float3 n)
 {
-    LightSample ss = DirectionalLight_Sample();
+    LightSample ss = DirectionalLight_Sample(g_constants.frame_count);
 
     ShadowRayPayload payload;
     payload.hit = true;
@@ -48,7 +48,7 @@ float3 CalculateDirectIllumination(float3 v, float3 n)
     RayDesc shadow_ray;
     shadow_ray.Direction = ss.direction;
     shadow_ray.Origin = v;
-    shadow_ray.TMin = 0.01f;
+    shadow_ray.TMin = 0.001f;
     shadow_ray.TMax = ss.distance;
 
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 1, 0, 1, shadow_ray, payload);
@@ -173,6 +173,8 @@ void Miss(inout RayPayload payload)
 {
     if (payload.recursion_depth == 0)
     {
-        g_output_gbuffer[DispatchRaysIndex().xy] = 0.f; 
+        uint2 xy = DispatchRaysIndex().xy;
+        g_output_gbuffer[xy] = 0.f; 
+        g_output_color_direct[xy] = float4(0.f, 0.f, 0.f, 1.f);
     }
 }

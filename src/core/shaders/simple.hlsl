@@ -13,8 +13,7 @@ struct Constants
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
-Texture2D<float4> g_raytraced_texture_direct : register(t0);
-Texture2D<float4> g_raytraced_texture_indirect : register(t1);
+Texture2D<float4> g_raytraced_texture : register(t0);
 
 VsOutput VsMain(uint vid: SV_VertexID)
 {
@@ -44,5 +43,5 @@ float4 PsMain(VsOutput input) : SV_TARGET
     pixel.x = int(input.uv.x * g_constants.width);
     pixel.y = int((1.f - input.uv.y) * g_constants.height);
     pixel.z = 0;
-    return g_raytraced_texture_direct.Load(pixel) + g_raytraced_texture_indirect.Load(pixel);
+    return g_raytraced_texture.Load(pixel);
 }

@@ -28,7 +28,7 @@ CameraSystem::CameraSystem()
 
     camera_component.camera_data.sensor_size.x = 0.036f;
     camera_component.camera_data.sensor_size.y = 0.024f;
-    camera_component.camera_data.focal_length = 0.024f;
+    camera_component.camera_data.focal_length = 0.016f;
 
     auto structure_size = align(sizeof(CameraData), RenderSystem::constant_buffer_alignment());
 

@@ -22,7 +22,7 @@ float CalculateNormalWeight(float3 n0, float3 n1)
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    return Gaussian(d0, d1, 1.f);
+    return Gaussian(d0, d1, 10.f);
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]

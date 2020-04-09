@@ -49,9 +49,9 @@ LRESULT __stdcall WndProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 
 int main()
 {
-    constexpr const char* kWindowClassName = "Capsaicin viewer";
-    constexpr std::uint32_t kWindowWidth = 800;
-    constexpr std::uint32_t kWindowHeight = 600;
+    constexpr const char* kWindowClassName = "Viewer";
+    constexpr std::uint32_t kWindowWidth = 1200;
+    constexpr std::uint32_t kWindowHeight = 800;
 
     WNDCLASSEX window_class{};
     window_class.cbSize = sizeof(WNDCLASSEX);
@@ -68,7 +68,7 @@ int main()
 
         HWND hwnd = CreateWindowEx(0,
                                    kWindowClassName,
-                                   "Capsaicin test",
+                                   "Viewer test",
                                    WS_OVERLAPPEDWINDOW,
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,

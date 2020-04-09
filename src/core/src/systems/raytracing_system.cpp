@@ -51,6 +51,17 @@ enum
 };
 }
 
+// Signature for a combine pass.
+namespace CombineIlluminationRootSignature
+{
+enum
+{
+    kConstants = 0,
+    kOutput,
+    kNumEntries
+};
+}
+
 // Root constants for raster blit.
 struct Constants
 {
@@ -58,6 +69,19 @@ struct Constants
     uint32_t height;
     uint32_t frame_count;
     uint32_t padding;
+};
+
+struct TAConstants
+{
+    uint32_t width;
+    uint32_t height;
+    uint32_t frame_count;
+    uint32_t padding;
+
+    float alpha;
+    uint32_t adjust_velocity;
+    uint32_t padding1;
+    uint32_t padding2;
 };
 
 // Find TLAS component and retrieve TLAS resource.
@@ -103,17 +127,24 @@ RaytracingSystem::RaytracingSystem()
     copy_gbuffer_command_list_ = dx12api().CreateCommandList(command_allocator);
     copy_gbuffer_command_list_->Close();
 
-    ta_command_list_ = dx12api().CreateCommandList(command_allocator);
-    ta_command_list_->Close();
+    indirect_ta_command_list_ = dx12api().CreateCommandList(command_allocator);
+    indirect_ta_command_list_->Close();
+
+    combined_ta_command_list_ = dx12api().CreateCommandList(command_allocator);
+    combined_ta_command_list_->Close();
 
     eaw_command_list_ = dx12api().CreateCommandList(command_allocator);
     eaw_command_list_->Close();
+
+    ci_command_list_ = dx12api().CreateCommandList(command_allocator);
+    ci_command_list_->Close();
 
     // Initialize raytracing pipeline.
     InitPipeline();
     InitRenderStructures();
     InitTemporalAccumulatePipeline();
     InitEAWDenoisePipeline();
+    InitCombinePipeline();
 }
 
 RaytracingSystem::~RaytracingSystem() = default;
@@ -134,8 +165,10 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
     auto scene_data_descriptor_table = PopulateSceneDataDescriptorTable(scene_data);
     auto output_descritor_table = PopulateOutputDescriptorTable();
     auto internal_descriptor_table = PopulateInternalDataDescritptorTable();
-    auto history_descriptor_table = PopulateHistoryDescritorTable();
+    auto history_descriptor_table = PopulateIndirectHistoryDescritorTable();
+    auto combined_history_descriptor_table = PopulateCombinedHistoryDescritorTable();
     auto eaw_descriptor_table = PopulateEAWOutputDescritorTable();
+    auto indirect_ta_input_descritor_table = PopulateIndirectTAInputDescritorTable();
 
     // Save previous GBuffer.
     CopyGBuffer();
@@ -151,30 +184,41 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
     IntegrateTemporally(camera.camera_buffer.Get(),
                         camera.prev_camera_buffer.Get(),
                         internal_descriptor_table,
-                        output_descritor_table,
-                        history_descriptor_table);
+                        indirect_ta_input_descritor_table,
+                        history_descriptor_table,
+                        indirect_ta_command_list_,
+                        0.9f,
+                        false);
 
     // Denoise.
     Denoise(eaw_descriptor_table);
+
+    // Recombine.
+    CombineIllumination(output_descritor_table);
+
+    // TAA
+     IntegrateTemporally(camera.camera_buffer.Get(),
+                        camera.prev_camera_buffer.Get(),
+                        internal_descriptor_table,
+                        indirect_ta_input_descritor_table,
+                        combined_history_descriptor_table,
+                        combined_ta_command_list_,
+                        0.8f,
+                        true);
 }
 
-ID3D12Resource* RaytracingSystem::current_frame_output_direct()
+ID3D12Resource* RaytracingSystem::current_frame_output()
 {
-    //auto& render_system = world().GetSystem<RenderSystem>();
-    return output_direct_.Get();
-}
-
-ID3D12Resource* RaytracingSystem::current_frame_output_indirect()
-{
-    // auto& render_system = world().GetSystem<RenderSystem>();
-    return output_indirect_.Get();
+   // return output_indirect_.Get();
+    auto& render_system = world().GetSystem<RenderSystem>();
+    return combined_history_[render_system.frame_count() % 2].Get();
 }
 
 void RaytracingSystem::InitPipeline()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto window_width = render_system.window_width();
-    auto window_height = render_system.window_width();
+    auto window_height = render_system.window_height();
 
     ComPtr<ID3D12Device5> device5 = nullptr;
     dx12api().device()->QueryInterface(IID_PPV_ARGS(&device5));
@@ -307,9 +351,13 @@ void RaytracingSystem::InitPipeline()
                                                              0,
                                                              D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-            temporal_history_[0] = dx12api().CreateResource(
+            indirect_history_[0] = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            temporal_history_[1] = dx12api().CreateResource(
+            indirect_history_[1] = dx12api().CreateResource(
+                texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            combined_history_[0] = dx12api().CreateResource(
+                texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            combined_history_[1] = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // GBuffers are 32 bit.
@@ -327,16 +375,16 @@ void RaytracingSystem::InitTemporalAccumulatePipeline()
     // Global Root Signature
     {
         CD3DX12_DESCRIPTOR_RANGE output_descriptor_range;
-        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 0);
+        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0);
 
         CD3DX12_DESCRIPTOR_RANGE history_descriptor_range;
-        history_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 3);
+        history_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 2);
 
         CD3DX12_DESCRIPTOR_RANGE blue_noise_texture_descriptor_range;
         blue_noise_texture_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
         CD3DX12_ROOT_PARAMETER root_entries[TemporalAccumulateRootSignature::kNumEntries] = {};
-        root_entries[TemporalAccumulateRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
+        root_entries[TemporalAccumulateRootSignature::kConstants].InitAsConstants(sizeof(TAConstants), 0);
         root_entries[TemporalAccumulateRootSignature::kCameraBuffer].InitAsConstantBufferView(1);
         root_entries[TemporalAccumulateRootSignature::kPrevCameraBuffer].InitAsConstantBufferView(2);
         root_entries[TemporalAccumulateRootSignature::kBlueNoiseTexture].InitAsDescriptorTable(
@@ -384,11 +432,33 @@ void RaytracingSystem::InitEAWDenoisePipeline()
     eaw_pipeline_state_ = dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
 }
 
+void RaytracingSystem::InitCombinePipeline()
+{
+    // Global Root Signature
+    {
+        CD3DX12_DESCRIPTOR_RANGE output_descriptor_range;
+        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0);
+
+        CD3DX12_ROOT_PARAMETER root_entries[CombineIlluminationRootSignature::kNumEntries] = {};
+        root_entries[CombineIlluminationRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
+        root_entries[CombineIlluminationRootSignature::kOutput].InitAsDescriptorTable(1, &output_descriptor_range);
+
+        CD3DX12_ROOT_SIGNATURE_DESC desc = {};
+        desc.Init(CombineIlluminationRootSignature::kNumEntries, root_entries);
+        ci_root_signature_ = dx12api().CreateRootSignature(desc);
+    }
+
+    auto shader = ShaderCompiler::instance().CompileFromFile(
+        "../../../src/core/shaders/combine_illumination.hlsl", "cs_6_3", "Combine");
+
+    ci_pipeline_state_ = dx12api().CreateComputePipelineState(shader, ci_root_signature_.Get());
+}
+
 void RaytracingSystem::CopyGBuffer()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto window_width = render_system.window_width();
-    auto window_height = render_system.window_width();
+    auto window_height = render_system.window_height();
     auto command_allocator = render_system.current_frame_command_allocator();
 
     copy_gbuffer_command_list_->Reset(command_allocator, nullptr);
@@ -446,7 +516,7 @@ void RaytracingSystem::Raytrace(ID3D12Resource* scene,
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto window_width = render_system.window_width();
-    auto window_height = render_system.window_width();
+    auto window_height = render_system.window_height();
     auto command_allocator = render_system.current_frame_command_allocator();
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
 
@@ -504,48 +574,81 @@ void RaytracingSystem::IntegrateTemporally(ID3D12Resource* camera,
                                            ID3D12Resource* prev_camera,
                                            uint32_t internal_descriptor_table,
                                            uint32_t output_descriptor_table,
-                                           uint32_t history_descriptor_table)
+                                           uint32_t history_descriptor_table,
+                                           ComPtr<ID3D12GraphicsCommandList> ta_command_list,
+                                           float alpha,
+                                           bool velocity_adjustment)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto window_width = render_system.window_width();
-    auto window_height = render_system.window_width();
+    auto window_height = render_system.window_height();
+    auto command_allocator = render_system.current_frame_command_allocator();
+    auto descriptor_heap = render_system.current_frame_descriptor_heap();
+
+    TAConstants constants{render_system.window_width(),
+                          render_system.window_height(),
+                          render_system.frame_count(),
+                          0,
+                          alpha,
+                          velocity_adjustment ? 1 : 0};
+
+    ta_command_list->Reset(command_allocator, nullptr);
+
+    ID3D12DescriptorHeap* desc_heaps[] = {descriptor_heap};
+
+    ta_command_list->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
+    ta_command_list->SetComputeRootSignature(ta_root_signature_.Get());
+    ta_command_list->SetPipelineState(ta_pipeline_state_.Get());
+    ta_command_list->SetComputeRoot32BitConstants(
+        TemporalAccumulateRootSignature::kConstants, sizeof(TAConstants) >> 2, &constants, 0);
+    ta_command_list->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kBlueNoiseTexture,
+                                                   render_system.GetDescriptorHandleGPU(internal_descriptor_table));
+    ta_command_list->SetComputeRootConstantBufferView(TemporalAccumulateRootSignature::kCameraBuffer,
+                                                      camera->GetGPUVirtualAddress());
+    ta_command_list->SetComputeRootConstantBufferView(TemporalAccumulateRootSignature::kPrevCameraBuffer,
+                                                      prev_camera->GetGPUVirtualAddress());
+    ta_command_list->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kCurrentFrameOutput,
+                                                   render_system.GetDescriptorHandleGPU(output_descriptor_table));
+    ta_command_list->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kHistory,
+                                                   render_system.GetDescriptorHandleGPU(history_descriptor_table));
+
+    ta_command_list->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+    ta_command_list->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nullptr));
+    ta_command_list->Close();
+    render_system.PushCommandList(ta_command_list);
+}
+
+void RaytracingSystem::CombineIllumination(uint32_t output_descriptor_table)
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto window_width = render_system.window_width();
+    auto window_height = render_system.window_height();
     auto command_allocator = render_system.current_frame_command_allocator();
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
 
     Constants constants{render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0};
 
-    ta_command_list_->Reset(command_allocator, nullptr);
-
+    ci_command_list_->Reset(command_allocator, nullptr);
     ID3D12DescriptorHeap* desc_heaps[] = {descriptor_heap};
 
-    ta_command_list_->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
-    ta_command_list_->SetComputeRootSignature(ta_root_signature_.Get());
-    ta_command_list_->SetPipelineState(ta_pipeline_state_.Get());
-    ta_command_list_->SetComputeRoot32BitConstants(
-        TemporalAccumulateRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
-    ta_command_list_->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kBlueNoiseTexture,
-                                                    render_system.GetDescriptorHandleGPU(internal_descriptor_table));
-    ta_command_list_->SetComputeRootConstantBufferView(TemporalAccumulateRootSignature::kCameraBuffer,
-                                                       camera->GetGPUVirtualAddress());
-    ta_command_list_->SetComputeRootConstantBufferView(TemporalAccumulateRootSignature::kPrevCameraBuffer,
-                                                       prev_camera->GetGPUVirtualAddress());
-    ta_command_list_->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kCurrentFrameOutput,
+    ci_command_list_->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
+    ci_command_list_->SetComputeRootSignature(ci_root_signature_.Get());
+    ci_command_list_->SetPipelineState(ci_pipeline_state_.Get());
+    ci_command_list_->SetComputeRoot32BitConstants(
+        CombineIlluminationRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
+    ci_command_list_->SetComputeRootDescriptorTable(CombineIlluminationRootSignature::kOutput,
                                                     render_system.GetDescriptorHandleGPU(output_descriptor_table));
-    ta_command_list_->SetComputeRootDescriptorTable(TemporalAccumulateRootSignature::kHistory,
-                                                    render_system.GetDescriptorHandleGPU(history_descriptor_table));
-
-    ta_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-    ta_command_list_->ResourceBarrier(
-        1, &CD3DX12_RESOURCE_BARRIER::UAV(temporal_history_[render_system.frame_count() % 2].Get()));
-    ta_command_list_->Close();
-    render_system.PushCommandList(ta_command_list_);
+    ci_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+    ci_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_indirect_.Get()));
+    ci_command_list_->Close();
+    render_system.PushCommandList(ci_command_list_);
 }
 
 void RaytracingSystem::Denoise(uint32_t descriptor_table)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto window_width = render_system.window_width();
-    auto window_height = render_system.window_width();
+    auto window_height = render_system.window_height();
     auto command_allocator = render_system.current_frame_command_allocator();
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
 
@@ -564,7 +667,6 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table)
 
     eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
     eaw_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_indirect_.Get()));
-
 
     constants.padding = 3;
     eaw_command_list_->SetComputeRoot32BitConstants(
@@ -680,7 +782,7 @@ uint32_t RaytracingSystem::PopulateInternalDataDescritptorTable()
     return base_index;
 }
 
-uint32_t RaytracingSystem::PopulateHistoryDescritorTable()
+uint32_t RaytracingSystem::PopulateIndirectHistoryDescritorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto base_index = render_system.AllocateDescriptorRange(3);
@@ -696,9 +798,9 @@ uint32_t RaytracingSystem::PopulateHistoryDescritorTable()
 
     // Create color buffer.
     dx12api().device()->CreateUnorderedAccessView(
-        temporal_history_[src_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
+        indirect_history_[src_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
     dx12api().device()->CreateUnorderedAccessView(
-        temporal_history_[dst_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
+        indirect_history_[dst_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
 
     // We need 32 bits for depth here for stable reconstruction.
     uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -707,6 +809,35 @@ uint32_t RaytracingSystem::PopulateHistoryDescritorTable()
 
     return base_index;
 }
+
+uint32_t RaytracingSystem::PopulateCombinedHistoryDescritorTable()
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto base_index = render_system.AllocateDescriptorRange(3);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
+    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uav_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    uav_desc.Texture2D.MipSlice = 0;
+    uav_desc.Texture2D.PlaneSlice = 0;
+
+    auto src_index = (render_system.frame_count() + 1) % 2;
+    auto dst_index = (src_index + 1) % 2;
+
+    // Create color buffer.
+    dx12api().device()->CreateUnorderedAccessView(
+        combined_history_[src_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
+    dx12api().device()->CreateUnorderedAccessView(
+        combined_history_[dst_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
+
+    // We need 32 bits for depth here for stable reconstruction.
+    uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dx12api().device()->CreateUnorderedAccessView(
+        prev_gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
+
+    return base_index;
+}
+
 uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
@@ -721,7 +852,7 @@ uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
     // History buffer is an input.
     uav_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     dx12api().device()->CreateUnorderedAccessView(
-        temporal_history_[history_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
+        indirect_history_[history_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
     dx12api().device()->CreateUnorderedAccessView(
         output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
     // Create gbuffer output.
@@ -748,6 +879,48 @@ uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
     uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     dx12api().device()->CreateUnorderedAccessView(
         gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 7));
+
+    return base_index;
+}
+uint32_t RaytracingSystem::PopulateIndirectTAInputDescritorTable()
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto base_index = render_system.AllocateDescriptorRange(2);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
+    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uav_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    uav_desc.Texture2D.MipSlice = 0;
+    uav_desc.Texture2D.PlaneSlice = 0;
+
+    // Create color buffer.
+    dx12api().device()->CreateUnorderedAccessView(
+        output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
+    // Create gbuffer output.
+    uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dx12api().device()->CreateUnorderedAccessView(
+        gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
+
+    return base_index;
+}
+uint32_t RaytracingSystem::PopulateDirectTAInputDescritorTable()
+{
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto base_index = render_system.AllocateDescriptorRange(2);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
+    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    uav_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    uav_desc.Texture2D.MipSlice = 0;
+    uav_desc.Texture2D.PlaneSlice = 0;
+
+    // Create color buffer.
+    dx12api().device()->CreateUnorderedAccessView(
+        output_direct_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
+    // Create gbuffer output.
+    uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dx12api().device()->CreateUnorderedAccessView(
+        gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
 
     return base_index;
 }

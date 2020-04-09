@@ -26,8 +26,7 @@ public:
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
-    ID3D12Resource* current_frame_output_direct();
-    ID3D12Resource* current_frame_output_indirect();
+    ID3D12Resource* current_frame_output();
     ID3D12Resource* blue_noise_texture() { return blue_noise_texture_.Get(); }
 
 private:
@@ -35,6 +34,7 @@ private:
     void InitTemporalAccumulatePipeline();
     void InitRenderStructures();
     void InitEAWDenoisePipeline();
+    void InitCombinePipeline();
 
     void CopyGBuffer();
 
@@ -48,21 +48,31 @@ private:
                              ID3D12Resource* prev_camera,
                              uint32_t internal_descriptor_table,
                              uint32_t output_descriptor_table,
-                             uint32_t history_descriptor_table);
+                             uint32_t history_descriptor_table,
+                             ComPtr<ID3D12GraphicsCommandList> ta_command_list,
+                             float alpha,
+                             bool velocity_adjustment);
+
+    void CombineIllumination(uint32_t output_descriptor_table);
 
     void Denoise(uint32_t descriptor_table);
 
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputDescriptorTable();
     uint32_t PopulateInternalDataDescritptorTable();
-    uint32_t PopulateHistoryDescritorTable();
+    uint32_t PopulateIndirectHistoryDescritorTable();
+    uint32_t PopulateCombinedHistoryDescritorTable();
     uint32_t PopulateEAWOutputDescritorTable();
+    uint32_t PopulateIndirectTAInputDescritorTable();
+    uint32_t PopulateDirectTAInputDescritorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> copy_gbuffer_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> ta_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> indirect_ta_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> combined_ta_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> eaw_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> ci_command_list_ = nullptr;
 
     ComPtr<ID3D12Resource> output_direct_ = nullptr;
     ComPtr<ID3D12Resource> output_indirect_ = nullptr;
@@ -82,10 +92,14 @@ private:
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
 
+    ComPtr<ID3D12RootSignature> ci_root_signature_ = nullptr;
+    ComPtr<ID3D12PipelineState> ci_pipeline_state_ = nullptr;
+
     // Render outputs and textures.
     ComPtr<ID3D12Resource> blue_noise_texture_ = nullptr;
     // Temporal history is ping-ponged.
-    ComPtr<ID3D12Resource> temporal_history_[2] = {nullptr};
+    ComPtr<ID3D12Resource> indirect_history_[2] = {nullptr};
+    ComPtr<ID3D12Resource> combined_history_[2] = {nullptr};
     // GBuffer data is used for TAA and ping-ponged as well.
     ComPtr<ID3D12Resource> gbuffer_ = nullptr;
     ComPtr<ID3D12Resource> prev_gbuffer_ = nullptr;

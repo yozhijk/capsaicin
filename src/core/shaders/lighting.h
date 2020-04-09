@@ -9,11 +9,16 @@ struct LightSample
     float distance;
 };
 
-LightSample DirectionalLight_Sample()
+LightSample DirectionalLight_Sample(uint count)
 {
+    float t = 2.f * 3.14 * float(count % 2048) / 2048.f;
+    float ly = 100.f;
+    float lx = 40.f * sin(t);
+    float lz = 40.f * cos(t);
+
     LightSample ls;
-    ls.direction = normalize(float3(0.3f, 1.f, 0.3f));
-    ls.intensity = float3(12.f, 10.f, 10.f);
+    ls.direction = normalize(float3(lx, ly, lz));
+    ls.intensity = float3(14.f, 12.f, 10.f);// + float3(3.f * sin(t), 2.f * sin(t) * cos(t), 1.f * cos(t));
     ls.pdf = 1.f;
     ls.distance = 100000.f;
     return ls;

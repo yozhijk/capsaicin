@@ -10,18 +10,22 @@ struct Constants
     uint height;
     uint frame_count;
     uint padding;
+
+    float alpha;
+    uint adjust_velocity;
+    uint padding1;
+    uint padding2;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 ConstantBuffer<Camera> g_prev_camera : register(b2);
 Texture2D<uint4> g_blue_noise: register(t0);
-RWTexture2D<float4> g_color_direct : register(u0);
-RWTexture2D<float4> g_color_indirect : register(u1);
-RWTexture2D<float4> g_gbuffer : register(u2);
-RWTexture2D<float4> g_history : register(u3);
-RWTexture2D<float4> g_prev_gbuffer : register(u4);
-RWTexture2D<float4> g_output_history : register(u5);
+RWTexture2D<float4> g_color : register(u0);
+RWTexture2D<float4> g_gbuffer : register(u1);
+RWTexture2D<float4> g_history : register(u2);
+RWTexture2D<float4> g_prev_gbuffer : register(u3);
+RWTexture2D<float4> g_output_history : register(u4);
 
 // This reconstruction is using the same blue-noise sample used by primary visibility pass.
 float3 ReconstructWorldPosition(in uint2 xy)
@@ -98,13 +102,12 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
                 float2 d = abs(f_current_pos - f_center_pos);
                 float w = cubic(d.x, 0, 0.5) * cubic(d.y, 0, 0.5) * rcp(1.f + luminance(value));
 
-
                 filtered += w * value;
                 tw += w;
             }
         }
 
-    return filtered / tw;
+    return tw > 1e-5f ? (filtered / tw) : 0.f;
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
@@ -132,17 +135,27 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
-        g_output_history[gidx] = float4(ResampleBicubic(g_color_indirect, gidx), 1.f);
+        g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
     }
     else
     {
-        float alpha = 0.98f - min(0.8, speed / 0.1f);
         uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
         reprojected_xy.x = min(reprojected_xy.x, g_constants.width - 1);
         reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
+        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
+
+        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.1f)
+        // {
+        //     g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
+        //     return;
+        // }
+
+        float velocity_adjustment = g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.9, speed/0.1f)) : 0.f;
+        float alpha = g_constants.alpha - velocity_adjustment;
+        
 
         float3 history = ResampleBicubic(g_history, reprojected_xy);
-        float3 color = ResampleBicubic(g_color_indirect, gidx);
+        float3 color = ResampleBicubic(g_color, gidx);
 
         g_output_history[gidx] = float4(lerp(color, history, alpha), 1.f);
     }

@@ -54,7 +54,7 @@ void CompositeSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
 void CompositeSystem::InitPipeline()
 {
     CD3DX12_DESCRIPTOR_RANGE range;
-    range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0);
+    range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
     CD3DX12_ROOT_PARAMETER root_entries[RootSignature::kNumEntries] = {};
     root_entries[RootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
@@ -91,7 +91,7 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
-    auto base_index = render_system.AllocateDescriptorRange(2);
+    auto base_index = render_system.AllocateDescriptorRange(1);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
     srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -102,10 +102,7 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
     srv_desc.Texture2D.ResourceMinLODClamp = 0;
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     dx12api().device()->CreateShaderResourceView(
-        raytracing_system.current_frame_output_direct(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
-    dx12api().device()->CreateShaderResourceView(
-        raytracing_system.current_frame_output_indirect(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
-
+        raytracing_system.current_frame_output(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
     return base_index;
 }
 
@@ -125,7 +122,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
     auto rtv_handle = render_system.current_frame_output_descriptor_handle();
     auto backbuffer = render_system.current_frame_output();
-    auto raytracing_output = raytracing_system.current_frame_output_direct();
+    auto raytracing_output = raytracing_system.current_frame_output();
 
     // Resource transitions.
     {

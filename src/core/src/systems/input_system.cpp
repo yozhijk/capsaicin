@@ -41,7 +41,7 @@ void InputSystem::HandleKeyboard(CameraData& camera_data, float dt)
     auto keyboard_state = keyboard_.GetState();
 
     XMFLOAT3 movement{0.f, 0.f, 0.f};
-    constexpr float kMovementSpeed = 0.025f;
+    constexpr float kMovementSpeed = 0.0125f;
 
     if (keyboard_state.IsKeyDown(Keyboard::A))
     {
@@ -104,7 +104,7 @@ void InputSystem::HandleMouse(CameraData& camera_data, float dt)
             return;
         }
 
-        constexpr float kMouseSensitivity = 0.05f;
+        constexpr float kMouseSensitivity = 0.025f;
         yaw_ += (float)(mouse.x - mouse_x_) * kMouseSensitivity * dt;
         pitch_ += (float)(mouse.y - mouse_y_) * kMouseSensitivity * dt;
 
