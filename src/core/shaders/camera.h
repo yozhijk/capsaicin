@@ -35,6 +35,7 @@ float2 CalculateImagePlaneCoordinates(in Camera camera, float3 position)
 
     if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
 
+
     // Intersection distance to an image plane.
     float t = dot(n, p - o) / dot(n, d);
 

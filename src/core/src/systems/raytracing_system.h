@@ -40,7 +40,7 @@ private:
                   ID3D12Resource* camera,
                   uint32_t scene_data_descriptor_table,
                   uint32_t internal_descriptor_table,
-                  uint32_t output_descriptor_table);
+                  uint32_t output_descriKOptor_table);
 
     void IntegrateTemporally(ID3D12Resource* camera,
                              ID3D12Resource* prev_camera,

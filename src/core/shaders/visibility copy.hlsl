@@ -1,7 +1,5 @@
 #include "camera.h"
 #include "sampling.h"
-#include "lighting.h"
-#include "shading.h"
 
 typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 
@@ -16,17 +14,8 @@ struct Constants
 struct RayPayload
 {
     float3 color;
-    float depth;
-
     float3 normal;
-    uint recursion_depth;
-
-    float3 throughput;
-};
-
-struct ShadowRayPayload
-{
-    bool hit;
+    float depth;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
@@ -40,29 +29,10 @@ RWBuffer<float2> g_texcoord_buffer : register(u3);
 RWTexture2D<float4> g_output_color : register(u4);
 RWTexture2D<float4> g_output_gbuffer : register(u5);
 
-float3 CalculateDirectIllumination(float3 v, float3 n)
-{
-    LightSample ss = DirectionalLight_Sample();
-
-    ShadowRayPayload payload;
-    payload.hit = true;
-
-    RayDesc shadow_ray;
-    shadow_ray.Direction = ss.direction;
-    shadow_ray.Origin = v;
-    shadow_ray.TMin = 0.01f;
-    shadow_ray.TMax = ss.distance;
-
-    TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 1, 0, 1, shadow_ray, payload);
-
-    if (payload.hit) return 0.f;
-
-    return ss.intensity * Lambert_Evaluate(n, ss.direction) * max(dot(n, ss.direction), 0.0);
-}
-
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
-    float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
+    //float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
+    float2 s = Sample2D_Hammersley16(xy, g_constants.frame_count);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);
@@ -88,20 +58,11 @@ void TraceVisibility()
     RayDesc ray = CreatePrimaryRay(DispatchRaysIndex(), DispatchRaysDimensions());
 
     RayPayload payload;
-    payload.color = 0.f;
-    payload.throughput = 1.f;
-    payload.recursion_depth = 0;
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 0, 0, 0, ray, payload);
 
     uint2 output_xy = DispatchRaysIndex();
     g_output_color[output_xy] = float4(payload.color, 1.f);
     g_output_gbuffer[output_xy] = float4(payload.normal, payload.depth);
-}
-
-[shader("anyhit")]
-void ShadowHit(inout ShadowRayPayload payload, in MyAttributes attr)
-{
-    payload.hit = true;
 }
 
 [shader("closesthit")]
@@ -130,52 +91,15 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
     float3 v = v0 * (1.f - uv.x - uv.y) + v1 * uv.x + v2 * uv.y;
 
-    payload.color += payload.throughput * CalculateDirectIllumination(v, n);
-
-    // Output GBuffer data for primary hits.
-    if (payload.recursion_depth == 0)
-    {
-        payload.normal = n;
-        payload.depth = length(v - g_camera.position);
-    }
-
-    // For all the bounces except the last one, cast extension ray.
-    if (payload.recursion_depth < 2)
-    {
-        // Add indirect.
-        uint2 xy = DispatchRaysIndex();
-
-        float2 s = Sample2D_BlueNoise(g_blue_noise, xy, g_constants.frame_count);
-
-        BrdfSample ss = Lambert_Sample(s, n);
-
-        RayDesc next_ray;
-        next_ray.Direction = ss.direction;
-        next_ray.Origin = v;
-        next_ray.TMin = 0.001f;
-        next_ray.TMax = ss.distance;
-
-        payload.throughput *= (ss.brdf * max(0.f, dot(n, ss.direction)) / ss.pdf);
-
-        // Trace indirect ray.
-        ++payload.recursion_depth;
-        TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 0, 0, 0, next_ray, payload);
-    }
-}
-
-[shader("miss")]
-void ShadowMiss(inout ShadowRayPayload payload)
-{
-    payload.hit = false;
+    payload.color = 0.5f * n + 0.5f;// float3(v0);//0.5f * n + 0.5f;
+    payload.normal = n;
+    payload.depth = length(v - g_camera.position);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-    if (payload.recursion_depth == 0)
-    {
-        payload.color = float3(0.0f, 0.0f, 0.f);
-        payload.normal = float3(0.f, 0.f, 0.f);
-        payload.depth = 0.f;
-    }
+    payload.color = float3(0.0f, 0.0f, 0.f);
+    payload.normal = float3(0.f, 0.f, 0.f);
+    payload.depth = 0.f;
 }

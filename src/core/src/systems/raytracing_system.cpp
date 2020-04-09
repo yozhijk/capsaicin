@@ -123,12 +123,14 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
     // Save previous GBuffer.
     CopyGBuffer();
 
+    // Do raytracing pass.
     Raytrace(tlas.tlas.Get(),
              camera.camera_buffer.Get(),
              scene_data_descriptor_table,
              internal_descriptor_table,
              output_descritor_table);
 
+    // Do temporal integration step.
     IntegrateTemporally(camera.camera_buffer.Get(),
                         camera.prev_camera_buffer.Get(),
                         internal_descriptor_table,
@@ -188,7 +190,9 @@ void RaytracingSystem::InitPipeline()
     lib->SetDXILLibrary(&libdxil);
     lib->DefineExport(L"TraceVisibility");
     lib->DefineExport(L"Hit");
+    lib->DefineExport(L"ShadowHit");
     lib->DefineExport(L"Miss");
+    lib->DefineExport(L"ShadowMiss");
 
     auto hit_group = pipeline.CreateSubobject<CD3DX12_HIT_GROUP_SUBOBJECT>();
     hit_group->SetClosestHitShaderImport(L"Hit");
@@ -196,16 +200,22 @@ void RaytracingSystem::InitPipeline()
     hit_group->SetHitGroupExport(L"HitGroup");
     hit_group->SetHitGroupType(D3D12_HIT_GROUP_TYPE_TRIANGLES);
 
+    auto shadow_hit_group = pipeline.CreateSubobject<CD3DX12_HIT_GROUP_SUBOBJECT>();
+    shadow_hit_group->SetAnyHitShaderImport(L"ShadowHit");
+
+    shadow_hit_group->SetHitGroupExport(L"ShadowHitGroup");
+    shadow_hit_group->SetHitGroupType(D3D12_HIT_GROUP_TYPE_TRIANGLES);
+
     auto shader_config = pipeline.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
-    UINT payload_size = 8 * sizeof(float);
-    UINT attribute_size = 2 * sizeof(float) + 2 * sizeof(uint32_t);
+    UINT payload_size = 3 * sizeof(XMFLOAT4);
+    UINT attribute_size = sizeof(XMFLOAT4);
     shader_config->Config(payload_size, attribute_size);
 
     auto global_root_signature = pipeline.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
     global_root_signature->SetRootSignature(raytracing_root_signature_.Get());
 
     auto pipeline_config = pipeline.CreateSubobject<CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT>();
-    uint32_t max_recursion_depth = 1;
+    uint32_t max_recursion_depth = 4;
     pipeline_config->Config(max_recursion_depth);
 
     // Create the state object.
@@ -217,14 +227,27 @@ void RaytracingSystem::InitPipeline()
 
     auto raygen_shader_id = state_object_props->GetShaderIdentifier(L"TraceVisibility");
     auto miss_shader_id = state_object_props->GetShaderIdentifier(L"Miss");
+    auto shadow_miss_shader_id = state_object_props->GetShaderIdentifier(L"ShadowMiss");
     auto hitgroup_shader_id = state_object_props->GetShaderIdentifier(L"HitGroup");
+    auto shadow_hitgroup_shader_id = state_object_props->GetShaderIdentifier(L"ShadowHitGroup");
 
     uint32_t shader_record_size =
         align(uint32_t(D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES), uint32_t(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT));
 
     raygen_shader_table = dx12api().CreateUploadBuffer(shader_record_size, raygen_shader_id);
-    hitgroup_shader_table = dx12api().CreateUploadBuffer(shader_record_size, hitgroup_shader_id);
-    miss_shader_table = dx12api().CreateUploadBuffer(shader_record_size, miss_shader_id);
+    hitgroup_shader_table = dx12api().CreateUploadBuffer(2 * shader_record_size);
+    miss_shader_table = dx12api().CreateUploadBuffer(2 * shader_record_size);
+
+    char* data = nullptr;
+    hitgroup_shader_table->Map(0, nullptr, (void**)&data);
+    memcpy(data, hitgroup_shader_id, shader_record_size);
+    memcpy(data + shader_record_size, shadow_hitgroup_shader_id, shader_record_size);
+    hitgroup_shader_table->Unmap(0, nullptr);
+
+    miss_shader_table->Map(0, nullptr, (void**)&data);
+    memcpy(data, miss_shader_id, shader_record_size);
+    memcpy(data + shader_record_size, shadow_miss_shader_id, shader_record_size);
+    miss_shader_table->Unmap(0, nullptr);
 
     {
         info("RaytracingSystem: Initializing raytracing outputs");
@@ -258,6 +281,9 @@ void RaytracingSystem::InitPipeline()
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             temporal_history_[1] = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+            // GBuffers are 32 bit.
+            texture_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
             gbuffer_ = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             prev_gbuffer_ = dx12api().CreateResource(
@@ -400,13 +426,15 @@ void RaytracingSystem::Raytrace(ID3D12Resource* scene,
     cmdlist4->SetComputeRootDescriptorTable(RaytracingRootSignature::kOutput,
                                             render_system.GetDescriptorHandleGPU(output_uav_index));
 
+    auto shader_record_size =
+        align(D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
     D3D12_DISPATCH_RAYS_DESC dispatch_desc{};
     dispatch_desc.HitGroupTable.StartAddress = hitgroup_shader_table->GetGPUVirtualAddress();
     dispatch_desc.HitGroupTable.SizeInBytes = hitgroup_shader_table->GetDesc().Width;
-    dispatch_desc.HitGroupTable.StrideInBytes = dispatch_desc.HitGroupTable.SizeInBytes;
+    dispatch_desc.HitGroupTable.StrideInBytes = shader_record_size;
     dispatch_desc.MissShaderTable.StartAddress = miss_shader_table->GetGPUVirtualAddress();
     dispatch_desc.MissShaderTable.SizeInBytes = miss_shader_table->GetDesc().Width;
-    dispatch_desc.MissShaderTable.StrideInBytes = dispatch_desc.MissShaderTable.SizeInBytes;
+    dispatch_desc.MissShaderTable.StrideInBytes = shader_record_size;
     dispatch_desc.RayGenerationShaderRecord.StartAddress = raygen_shader_table->GetGPUVirtualAddress();
     dispatch_desc.RayGenerationShaderRecord.SizeInBytes = raygen_shader_table->GetDesc().Width;
     dispatch_desc.Width = window_width;
@@ -517,6 +545,7 @@ uint32_t RaytracingSystem::PopulateOutputDescriptorTable()
         raytracing_output_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
 
     // Create gbuffer output.
+    uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     dx12api().device()->CreateUnorderedAccessView(
         gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
 
@@ -559,9 +588,12 @@ uint32_t RaytracingSystem::PopulateHistoryDescritorTable()
     dx12api().device()->CreateUnorderedAccessView(
         temporal_history_[src_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index));
     dx12api().device()->CreateUnorderedAccessView(
-        prev_gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
-    dx12api().device()->CreateUnorderedAccessView(
         temporal_history_[dst_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
+
+    // We need 32 bits for depth here for stable reconstruction.
+    uav_desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    dx12api().device()->CreateUnorderedAccessView(
+        prev_gbuffer_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
 
     return base_index;
 }

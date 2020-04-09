@@ -1,5 +1,7 @@
 
 #include "camera.h"
+#include "sampling.h"
+
 #define TILE_SIZE 8
 
 struct Constants
@@ -20,28 +22,10 @@ RWTexture2D<float4> g_history : register(u2);
 RWTexture2D<float4> g_prev_gbuffer : register(u3);
 RWTexture2D<float4> g_output_history : register(u4);
 
-#define kAACellDim 4
-#define kAACellSize (kAACellDim * kAACellDim)
-
-float2 Sample2D_StableSubpixelBlueNoise()
-{
-    uint x = (g_constants.frame_count % kAACellSize) % kAACellDim;
-    uint y = (g_constants.frame_count % kAACellSize) / kAACellDim;
-    return float2(g_blue_noise.Load(int3(x, y, 0)).xy) / 255.f;
-}
-
-
-float2 Sample2D_StableSubpixelBlueNoise(uint frame_count)
-{
-    uint x = (frame_count % kAACellSize) % kAACellDim;
-    uint y = (frame_count % kAACellSize) / kAACellDim;
-    return float2(g_blue_noise.Load(int3(x, y, 0)).xy) / 255.f;
-}
-
 // This reconstruction is using the same blue-noise sample used by primary visibility pass.
 float3 ReconstructWorldPosition(in uint2 xy)
 {
-    float2 s = Sample2D_StableSubpixelBlueNoise();
+    float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
 
     // Calculate [0..1] image plane sample
     uint2 dim = uint2(g_constants.width, g_constants.height);
@@ -90,7 +74,7 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
 {
     float3 filtered = float3(0.f, 0.f, 0.f);
     int2 center_xy = uxy;
-    float2 f_center_pos = float2(center_xy) + Sample2D_StableSubpixelBlueNoise(g_constants.frame_count - 1);
+    float2 f_center_pos = float2(center_xy) + Sample2D_BlueNoise4x4Stable(g_blue_noise, center_xy, g_constants.frame_count - 1);
     float tw = 0.f;
 
     // 3x3 bicubic filter.
@@ -106,7 +90,7 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
                 float3 value = texture.Load(int3(current_xy, 0)).xyz;
 
                 // Use blue-noise sample position from previous frame.
-                float2 s = Sample2D_StableSubpixelBlueNoise(g_constants.frame_count - 1);
+                float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, current_xy, g_constants.frame_count - 1);
                 float2 f_current_pos = float2(current_xy) + s;
 
 
@@ -135,6 +119,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     // Reconstruct normalized image plane coordinates in the previous frame (-1..1 range).
     float2 prev_frame_uv = CalculateImagePlaneCoordinates(g_prev_camera, hit_position);
+    float2 this_frame_uv = CalculateImagePlaneCoordinates(g_camera, hit_position);
+    float speed = length(prev_frame_uv - this_frame_uv);
 
     // Fetch GBuffer data.
     float4 gbuffer_data = g_gbuffer.Load(int3(gidx, 0));
@@ -149,13 +135,14 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     }
     else
     {
-        float alpha = 0.75f;
+        float alpha = 0.9f - min(0.8, speed / 0.1f);
         uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
         reprojected_xy.x = min(reprojected_xy.x, g_constants.width - 1);
         reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
 
         float3 history = ResampleBicubic(g_history, reprojected_xy);
-        float3 color = ResampleBicubic(g_color, gidx);
+        float3 color = g_color[gidx];
+
         g_output_history[gidx] = float4(lerp(color, history, alpha), 1.f);
     }
 }
