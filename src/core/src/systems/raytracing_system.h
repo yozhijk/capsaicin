@@ -26,13 +26,15 @@ public:
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
-    ID3D12Resource* current_frame_output();
+    ID3D12Resource* current_frame_output_direct();
+    ID3D12Resource* current_frame_output_indirect();
     ID3D12Resource* blue_noise_texture() { return blue_noise_texture_.Get(); }
 
 private:
     void InitPipeline();
     void InitTemporalAccumulatePipeline();
     void InitRenderStructures();
+    void InitEAWDenoisePipeline();
 
     void CopyGBuffer();
 
@@ -48,17 +50,24 @@ private:
                              uint32_t output_descriptor_table,
                              uint32_t history_descriptor_table);
 
+    void Denoise(uint32_t descriptor_table);
+
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputDescriptorTable();
     uint32_t PopulateInternalDataDescritptorTable();
     uint32_t PopulateHistoryDescritorTable();
+    uint32_t PopulateEAWOutputDescritorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> copy_gbuffer_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> ta_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> eaw_command_list_ = nullptr;
 
-    ComPtr<ID3D12Resource> raytracing_output_ = nullptr;
+    ComPtr<ID3D12Resource> output_direct_ = nullptr;
+    ComPtr<ID3D12Resource> output_indirect_ = nullptr;
+    ComPtr<ID3D12Resource> output_temp_ = nullptr;
+
     // Shader tables.
     ComPtr<ID3D12Resource> raygen_shader_table = nullptr;
     ComPtr<ID3D12Resource> hitgroup_shader_table = nullptr;
@@ -69,6 +78,9 @@ private:
 
     ComPtr<ID3D12RootSignature> ta_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> ta_pipeline_state_ = nullptr;
+
+    ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
+    ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
 
     // Render outputs and textures.
     ComPtr<ID3D12Resource> blue_noise_texture_ = nullptr;

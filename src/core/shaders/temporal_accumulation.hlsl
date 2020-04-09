@@ -16,11 +16,12 @@ ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 ConstantBuffer<Camera> g_prev_camera : register(b2);
 Texture2D<uint4> g_blue_noise: register(t0);
-RWTexture2D<float4> g_color : register(u0);
-RWTexture2D<float4> g_gbuffer : register(u1);
-RWTexture2D<float4> g_history : register(u2);
-RWTexture2D<float4> g_prev_gbuffer : register(u3);
-RWTexture2D<float4> g_output_history : register(u4);
+RWTexture2D<float4> g_color_direct : register(u0);
+RWTexture2D<float4> g_color_indirect : register(u1);
+RWTexture2D<float4> g_gbuffer : register(u2);
+RWTexture2D<float4> g_history : register(u3);
+RWTexture2D<float4> g_prev_gbuffer : register(u4);
+RWTexture2D<float4> g_output_history : register(u5);
 
 // This reconstruction is using the same blue-noise sample used by primary visibility pass.
 float3 ReconstructWorldPosition(in uint2 xy)
@@ -131,17 +132,17 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
-        g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
+        g_output_history[gidx] = float4(ResampleBicubic(g_color_indirect, gidx), 1.f);
     }
     else
     {
-        float alpha = 0.9f - min(0.8, speed / 0.1f);
+        float alpha = 0.98f - min(0.8, speed / 0.1f);
         uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
         reprojected_xy.x = min(reprojected_xy.x, g_constants.width - 1);
         reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
 
         float3 history = ResampleBicubic(g_history, reprojected_xy);
-        float3 color = g_color[gidx];
+        float3 color = ResampleBicubic(g_color_indirect, gidx);
 
         g_output_history[gidx] = float4(lerp(color, history, alpha), 1.f);
     }

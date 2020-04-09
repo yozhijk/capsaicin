@@ -35,6 +35,8 @@ public:
     ComPtr<IDXGISwapChain3> CreateSwapchain(HWND hwnd, UINT width, UINT height, UINT backbuffer_count);
     ComPtr<ID3D12RootSignature> CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC& desc);
     ComPtr<ID3D12PipelineState> CreatePipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
+    ComPtr<ID3D12PipelineState> CreateComputePipelineState(const D3D12_SHADER_BYTECODE& bytecode,
+                                                           ID3D12RootSignature* root_signature);
 
     ID3D12Device* device() { return device_.Get(); }
     ID3D12CommandQueue* command_queue() { return command_queue_.Get(); }

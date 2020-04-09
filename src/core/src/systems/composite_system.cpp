@@ -13,7 +13,7 @@ namespace RootSignature
 enum
 {
     kConstants = 0,
-    kRaytracedTexture,
+    kRaytracerOutput,
     kNumEntries
 };
 }
@@ -54,11 +54,11 @@ void CompositeSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
 void CompositeSystem::InitPipeline()
 {
     CD3DX12_DESCRIPTOR_RANGE range;
-    range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+    range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0);
 
     CD3DX12_ROOT_PARAMETER root_entries[RootSignature::kNumEntries] = {};
     root_entries[RootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
-    root_entries[RootSignature::kRaytracedTexture].InitAsDescriptorTable(1, &range);
+    root_entries[RootSignature::kRaytracerOutput].InitAsDescriptorTable(1, &range);
 
     CD3DX12_ROOT_SIGNATURE_DESC desc = {};
     desc.Init(RootSignature::kNumEntries, root_entries);
@@ -91,7 +91,7 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
-    auto base_index = render_system.AllocateDescriptorRange(1);
+    auto base_index = render_system.AllocateDescriptorRange(2);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
     srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -102,7 +102,9 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
     srv_desc.Texture2D.ResourceMinLODClamp = 0;
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     dx12api().device()->CreateShaderResourceView(
-        raytracing_system.current_frame_output(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
+        raytracing_system.current_frame_output_direct(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
+    dx12api().device()->CreateShaderResourceView(
+        raytracing_system.current_frame_output_indirect(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index + 1));
 
     return base_index;
 }
@@ -123,7 +125,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
     auto rtv_handle = render_system.current_frame_output_descriptor_handle();
     auto backbuffer = render_system.current_frame_output();
-    auto raytracing_output = raytracing_system.current_frame_output();
+    auto raytracing_output = raytracing_system.current_frame_output_direct();
 
     // Resource transitions.
     {
@@ -148,7 +150,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
     command_list_->SetDescriptorHeaps(ARRAYSIZE(descriptor_heaps), descriptor_heaps);
     command_list_->SetGraphicsRoot32BitConstants(RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     command_list_->SetPipelineState(pipeline_state_.Get());
-    command_list_->SetGraphicsRootDescriptorTable(RootSignature::kRaytracedTexture,
+    command_list_->SetGraphicsRootDescriptorTable(RootSignature::kRaytracerOutput,
                                                  render_system.GetDescriptorHandleGPU(output_srv_index));
 
     D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width), static_cast<float>(window_height)};

@@ -16,9 +16,6 @@ struct Constants
 struct RayPayload
 {
     float3 color;
-    float depth;
-
-    float3 normal;
     uint recursion_depth;
 
     float3 throughput;
@@ -37,8 +34,9 @@ RWBuffer<uint> g_index_buffer : register(u0);
 RWBuffer<float> g_vertex_buffer : register(u1);
 RWBuffer<float> g_normal_buffer : register(u2);
 RWBuffer<float2> g_texcoord_buffer : register(u3);
-RWTexture2D<float4> g_output_color : register(u4);
-RWTexture2D<float4> g_output_gbuffer : register(u5);
+RWTexture2D<float4> g_output_color_direct : register(u4);
+RWTexture2D<float4> g_output_color_indirect : register(u5);
+RWTexture2D<float4> g_output_gbuffer : register(u6);
 
 float3 CalculateDirectIllumination(float3 v, float3 n)
 {
@@ -94,8 +92,7 @@ void TraceVisibility()
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE , ~0, 0, 0, 0, ray, payload);
 
     uint2 output_xy = DispatchRaysIndex();
-    g_output_color[output_xy] = float4(payload.color, 1.f);
-    g_output_gbuffer[output_xy] = float4(payload.normal, payload.depth);
+    g_output_color_indirect[output_xy] = float4(payload.color, 1.f);
 }
 
 [shader("anyhit")]
@@ -107,6 +104,7 @@ void ShadowHit(inout ShadowRayPayload payload, in MyAttributes attr)
 [shader("closesthit")]
 void Hit(inout RayPayload payload, in MyAttributes attr)
 {
+    uint2 xy = DispatchRaysIndex();
     uint prim_index = PrimitiveIndex();
     uint instance_index = InstanceIndex();
 
@@ -130,21 +128,22 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
     float3 v = v0 * (1.f - uv.x - uv.y) + v1 * uv.x + v2 * uv.y;
 
-    payload.color += payload.throughput * CalculateDirectIllumination(v, n);
 
     // Output GBuffer data for primary hits.
     if (payload.recursion_depth == 0)
     {
-        payload.normal = n;
-        payload.depth = length(v - g_camera.position);
+        g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n), 1.f);
+        g_output_gbuffer[xy] = float4(n, length(g_camera.position - v));
+    }
+    else
+    {
+        payload.color += payload.throughput * CalculateDirectIllumination(v, n);
     }
 
     // For all the bounces except the last one, cast extension ray.
     if (payload.recursion_depth < 2)
     {
         // Add indirect.
-        uint2 xy = DispatchRaysIndex();
-
         float2 s = Sample2D_BlueNoise(g_blue_noise, xy, g_constants.frame_count);
 
         BrdfSample ss = Lambert_Sample(s, n);
@@ -174,8 +173,6 @@ void Miss(inout RayPayload payload)
 {
     if (payload.recursion_depth == 0)
     {
-        payload.color = float3(0.0f, 0.0f, 0.f);
-        payload.normal = float3(0.f, 0.f, 0.f);
-        payload.depth = 0.f;
+        g_output_gbuffer[DispatchRaysIndex().xy] = 0.f; 
     }
 }

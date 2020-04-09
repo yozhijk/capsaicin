@@ -234,7 +234,21 @@ ComPtr<ID3D12PipelineState> Dx12::CreatePipelineState(const D3D12_GRAPHICS_PIPEL
 {
     ComPtr<ID3D12PipelineState> pipeline_state;
     ThrowIfFailed(device()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline_state)),
-                  "Cannot create pipeline state");
+                  "Cannot create graphics pipeline state");
     return pipeline_state;
+}
+ComPtr<ID3D12PipelineState> Dx12::CreateComputePipelineState(const D3D12_SHADER_BYTECODE& bytecode,
+                                                             ID3D12RootSignature* root_signature)
+{
+    ComPtr<ID3D12PipelineState> result = nullptr;
+
+    D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+    desc.pRootSignature = root_signature;
+    desc.CS = bytecode;
+    desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+    ThrowIfFailed(dx12api().device()->CreateComputePipelineState(&desc, IID_PPV_ARGS(&result)),
+                  "Cannot create compute pipeline state");
+    return result;
 }
 }  // namespace capsaicin::dx12
