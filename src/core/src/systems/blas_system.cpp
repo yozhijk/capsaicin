@@ -1,7 +1,11 @@
 #include "blas_system.h"
 
+#include <DirectXMath.h>
+
 #include "src/systems/asset_load_system.h"
 #include "src/systems/render_system.h"
+
+using namespace DirectX;
 
 namespace capsaicin
 {
@@ -12,6 +16,8 @@ void BuildBLAS(MeshComponent& gpu_mesh,
                ID3D12GraphicsCommandList* command_list,
                RenderSystem& render_system)
 {
+    auto& geometry_storage = world().GetSystem<AssetLoadSystem>().geometry_storage();
+
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     command_list->QueryInterface(IID_PPV_ARGS(&cmdlist4));
 
@@ -21,12 +27,12 @@ void BuildBLAS(MeshComponent& gpu_mesh,
     D3D12_RAYTRACING_GEOMETRY_DESC geometry_desc;
     geometry_desc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
     geometry_desc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-    geometry_desc.Triangles.VertexBuffer.StartAddress = gpu_mesh.vertices->GetGPUVirtualAddress();
+    geometry_desc.Triangles.VertexBuffer.StartAddress = geometry_storage.vertices->GetGPUVirtualAddress() + gpu_mesh.first_vertex_offset * sizeof(XMFLOAT3);
     geometry_desc.Triangles.VertexBuffer.StrideInBytes = 3 * sizeof(float);
     geometry_desc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-    geometry_desc.Triangles.VertexCount = gpu_mesh.vertices->GetDesc().Width / (3 * sizeof(float));
-    geometry_desc.Triangles.IndexBuffer = gpu_mesh.indices->GetGPUVirtualAddress();
-    geometry_desc.Triangles.IndexCount = gpu_mesh.indices->GetDesc().Width / sizeof(uint32_t);
+    geometry_desc.Triangles.VertexCount = gpu_mesh.vertex_count;
+    geometry_desc.Triangles.IndexBuffer = geometry_storage.indices->GetGPUVirtualAddress() + gpu_mesh.first_index_offset * sizeof(uint32_t);
+    geometry_desc.Triangles.IndexCount = gpu_mesh.index_count;
     geometry_desc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
     geometry_desc.Triangles.Transform3x4 = 0;
 

@@ -13,24 +13,45 @@ struct AssetComponent
     std::string file_name;
 };
 
+struct GeometryStorage
+{
+    ComPtr<ID3D12Resource> vertices = nullptr;
+    ComPtr<ID3D12Resource> normals = nullptr;
+    ComPtr<ID3D12Resource> texcoords = nullptr;
+    ComPtr<ID3D12Resource> indices = nullptr;
+    ComPtr<ID3D12Resource> mesh_descs = nullptr;
+
+    uint32_t mesh_count = 0;
+    uint32_t vertex_count = 0;
+    uint32_t index_count = 0;
+};
+
 struct MeshComponent
 {
-    ComPtr<ID3D12Resource> vertices;
-    ComPtr<ID3D12Resource> normals;
-    ComPtr<ID3D12Resource> texcoords;
-    ComPtr<ID3D12Resource> indices;
+    uint32_t vertex_count = 0;
+    uint32_t first_vertex_offset = 0;
+    uint32_t index_count = 0;
+    uint32_t first_index_offset = 0;
 
-    uint32_t triangle_count;
+    uint32_t index = 0;
+    uint32_t padding[3];
 };
 
 class AssetLoadSystem : public System
 {
 public:
+    static constexpr uint32_t kVertexPoolSize = 10000000;
+    static constexpr uint32_t kIndexPoolSize = 10000000;
+    static constexpr uint32_t kMeshPoolSize = 1000;
+    AssetLoadSystem();
     ~AssetLoadSystem() override = default;
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
+    GeometryStorage& geometry_storage() { return storage_; }
+
 private:
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
+    GeometryStorage storage_;
 };
 }  // namespace capsaicins

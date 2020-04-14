@@ -1,11 +1,14 @@
 #include "asset_load_system.h"
 
+#include <DirectXMath.h>
+
 #include "src/common.h"
 #include "src/systems/render_system.h"
 #include "tiny_obj_loader.h"
 
 using namespace tinyobj;
 using namespace std;
+using namespace DirectX;
 
 namespace capsaicin
 {
@@ -13,6 +16,7 @@ namespace
 {
 struct MeshData
 {
+    Entity entity;
     vector<float> positions;
     vector<float> normals;
     vector<float> texcoords;
@@ -111,69 +115,98 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
     }
 }
 
-void CreateGPUBuffers(const MeshData& mesh_data,
-                      MeshComponent& mesh_component,
-                      ID3D12GraphicsCommandList* command_list,
-                      RenderSystem& render_system)
+void CreateGeometryStorage(std::vector<MeshData>& mesh_data_array,
+                           GeometryStorage& storage,
+                           ID3D12GraphicsCommandList* command_list,
+                           RenderSystem& render_system)
 {
-    // Create mesh buffers in GPU memory.
-    mesh_component.vertices =
-        dx12api().CreateUAVBuffer(mesh_data.positions.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
-    mesh_component.indices =
-        dx12api().CreateUAVBuffer(mesh_data.indices.size() * sizeof(uint32_t), D3D12_RESOURCE_STATE_COPY_DEST);
-    mesh_component.normals =
-        dx12api().CreateUAVBuffer(mesh_data.normals.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
-    mesh_component.texcoords =
-        dx12api().CreateUAVBuffer(mesh_data.texcoords.size() * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
+    std::vector<MeshComponent> meshes;
+    for (auto& mesh_data : mesh_data_array)
+    {
+        auto& mesh_component = world().AddComponent<MeshComponent>(mesh_data.entity);
+        mesh_component.first_vertex_offset = storage.vertex_count;
+        mesh_component.first_index_offset = storage.index_count;
+        mesh_component.vertex_count = mesh_data.positions.size() / 3;
+        mesh_component.index_count = mesh_data.indices.size();
+        mesh_component.index = meshes.size();
 
+        // Create upload buffers.
+        auto vertex_upload_buffer =
+            dx12api().CreateUploadBuffer(mesh_data.positions.size() * sizeof(float), mesh_data.positions.data());
+        auto index_upload_buffer =
+            dx12api().CreateUploadBuffer(mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
+        auto normals_upload_buffer =
+            dx12api().CreateUploadBuffer(mesh_data.normals.size() * sizeof(float), mesh_data.normals.data());
+        auto texcoord_upload_buffer =
+            dx12api().CreateUploadBuffer(mesh_data.texcoords.size() * sizeof(float), mesh_data.texcoords.data());
 
-    // Create upload buffers.
-    auto vertex_upload_buffer =
-        dx12api().CreateUploadBuffer(mesh_data.positions.size() * sizeof(float), mesh_data.positions.data());
-    auto index_upload_buffer =
-        dx12api().CreateUploadBuffer(mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
-    auto normals_upload_buffer =
-        dx12api().CreateUploadBuffer(mesh_data.normals.size() * sizeof(float), mesh_data.normals.data());
-    auto texcoord_upload_buffer =
-        dx12api().CreateUploadBuffer(mesh_data.texcoords.size() * sizeof(float), mesh_data.texcoords.data());
+        render_system.AddAutoreleaseResource(vertex_upload_buffer);
+        render_system.AddAutoreleaseResource(index_upload_buffer);
+        render_system.AddAutoreleaseResource(normals_upload_buffer);
+        render_system.AddAutoreleaseResource(texcoord_upload_buffer);
 
+        // Copy data.
+        command_list->CopyBufferRegion(storage.vertices.Get(),
+                                       mesh_component.first_vertex_offset * sizeof(XMFLOAT3),
+                                       vertex_upload_buffer.Get(),
+                                       0,
+                                       mesh_data.positions.size() * sizeof(float));
+        command_list->CopyBufferRegion(storage.indices.Get(),
+                                       mesh_component.first_index_offset * sizeof(uint32_t),
+                                       index_upload_buffer.Get(),
+                                       0,
+                                       mesh_data.indices.size() * sizeof(uint32_t));
+        command_list->CopyBufferRegion(storage.normals.Get(),
+                                       mesh_component.first_vertex_offset * sizeof(XMFLOAT3),
+                                       normals_upload_buffer.Get(),
+                                       0,
+                                       mesh_data.normals.size() * sizeof(float));
+        command_list->CopyBufferRegion(storage.texcoords.Get(),
+                                       mesh_component.first_vertex_offset * sizeof(XMFLOAT2),
+                                       texcoord_upload_buffer.Get(),
+                                       0,
+                                       mesh_data.texcoords.size() * sizeof(float));
 
-    render_system.AddAutoreleaseResource(vertex_upload_buffer);
-    render_system.AddAutoreleaseResource(index_upload_buffer);
-    render_system.AddAutoreleaseResource(normals_upload_buffer);
-    render_system.AddAutoreleaseResource(texcoord_upload_buffer);
+        meshes.push_back(mesh_component);
+        storage.vertex_count += mesh_component.vertex_count;
+        storage.index_count += mesh_component.index_count;
+        ++storage.mesh_count;
+    }
+
+    // Upload mesh buffer.
+    auto mesh_upload_buffer = dx12api().CreateUploadBuffer(storage.mesh_count * sizeof(MeshComponent), meshes.data());
+    render_system.AddAutoreleaseResource(mesh_upload_buffer);
+
+    command_list->CopyBufferRegion(
+        storage.mesh_descs.Get(), 0, mesh_upload_buffer.Get(), 0, storage.mesh_count * sizeof(MeshComponent));
 
     // Transitions for mesh buffes to non pixel shader resource.
     D3D12_RESOURCE_BARRIER copy_dest_to_uav[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.vertices.Get(),
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.indices.Get(),
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.normals.Get(),
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(mesh_component.texcoords.Get(),
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
-    };
-
-    // Copy data.
-    command_list->CopyBufferRegion(
-        mesh_component.vertices.Get(), 0, vertex_upload_buffer.Get(), 0, mesh_data.positions.size() * sizeof(float));
-    command_list->CopyBufferRegion(
-        mesh_component.indices.Get(), 0, index_upload_buffer.Get(), 0, mesh_data.indices.size() * sizeof(uint32_t));
-    command_list->CopyBufferRegion(
-        mesh_component.normals.Get(), 0, normals_upload_buffer.Get(), 0, mesh_data.normals.size() * sizeof(float));
-    command_list->CopyBufferRegion(
-        mesh_component.texcoords.Get(), 0, texcoord_upload_buffer.Get(), 0, mesh_data.texcoords.size() * sizeof(float));
-
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            storage.vertices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            storage.indices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            storage.normals.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            storage.mesh_descs.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            storage.texcoords.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
 
     // Transition to UAV.
     command_list->ResourceBarrier(ARRAYSIZE(copy_dest_to_uav), copy_dest_to_uav);
 }
 }  // namespace
+
+AssetLoadSystem::AssetLoadSystem()
+{
+    storage_.vertices = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3), D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.indices = dx12api().CreateUAVBuffer(kIndexPoolSize * sizeof(uint32_t), D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.normals = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3), D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.texcoords = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT2), D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.mesh_descs =
+        dx12api().CreateUAVBuffer(kMeshPoolSize * sizeof(MeshComponent), D3D12_RESOURCE_STATE_COPY_DEST);
+}
 
 void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
@@ -205,19 +238,23 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         upload_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
 
         // Load asset.
+        std::vector<MeshData> meshes;
         for (auto e : entities)
         {
             auto& asset = world().GetComponent<AssetComponent>(e);
-            auto& gpu_mesh = world().AddComponent<MeshComponent>(e);
-
             info("AssetLoadSystem: Loading {}", asset.file_name);
 
             MeshData mesh_data;
+            mesh_data.entity = e;
             LoadObjFile(asset, mesh_data);
 
-            info("AssetLoadSystem: Allocating GPU buffers for {}", asset.file_name);
-            CreateGPUBuffers(mesh_data, gpu_mesh, upload_command_list_.Get(), render_system);
+            // Add to mesh storage.
+            meshes.push_back(mesh_data);
         }
+
+        info("AssetLoadSystem: Allocating GPU buffers");
+
+        CreateGeometryStorage(meshes, storage_, upload_command_list_.Get(), render_system);
 
         upload_command_list_->Close();
         render_system.PushCommandList(upload_command_list_);

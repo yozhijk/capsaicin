@@ -16,6 +16,7 @@ struct GPUSceneData
     ID3D12Resource* vertex_buffer;
     ID3D12Resource* normal_buffer;
     ID3D12Resource* texcoord_buffer;
+    ID3D12Resource* mesh_desc_buffer;
 };
 
 class RaytracingSystem : public System
@@ -42,7 +43,7 @@ private:
                   ID3D12Resource* camera,
                   uint32_t scene_data_descriptor_table,
                   uint32_t internal_descriptor_table,
-                  uint32_t output_descriKOptor_table);
+                  uint32_t output_descriptor_table);
 
     void IntegrateTemporally(ID3D12Resource* camera,
                              ID3D12Resource* prev_camera,

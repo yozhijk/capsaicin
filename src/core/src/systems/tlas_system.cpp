@@ -22,7 +22,7 @@ void BuildTLAS(const EntitySet::EntityStorage& entities,
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS build_input;
     build_input.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
     build_input.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-    build_input.NumDescs = 1;
+    build_input.NumDescs = entities.size();
     build_input.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     build_input.InstanceDescs = 0;
 
@@ -41,16 +41,19 @@ void BuildTLAS(const EntitySet::EntityStorage& entities,
     for (auto e : entities)
     {
         auto& blas = world().GetComponent<BLASComponent>(e);
+        auto& mesh = world().GetComponent<MeshComponent>(e);
         instance_descs[instance_index].AccelerationStructure = blas.blas->GetGPUVirtualAddress();
         instance_descs[instance_index].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
         instance_descs[instance_index].InstanceContributionToHitGroupIndex = 0;
-        instance_descs[instance_index].InstanceID = instance_index;
+        instance_descs[instance_index].InstanceID = mesh.index;
         instance_descs[instance_index].InstanceMask = 0xff;
 
         memset(&instance_descs[instance_index].Transform[0][0], 0, 12 * sizeof(float));
         instance_descs[instance_index].Transform[0][0] = 1.f;
         instance_descs[instance_index].Transform[1][1] = 1.f;
         instance_descs[instance_index].Transform[2][2] = 1.f;
+
+        ++instance_index;
     }
 
     auto upload_buffer =

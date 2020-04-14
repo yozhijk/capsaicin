@@ -86,6 +86,7 @@ int main()
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
             LoadSceneFromOBJ("../../../assets/sponza.obj");
+            LoadSceneFromOBJ("../../../assets/cornell_box.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 

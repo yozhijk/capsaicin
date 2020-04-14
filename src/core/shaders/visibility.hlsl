@@ -2,6 +2,7 @@
 #include "sampling.h"
 #include "lighting.h"
 #include "shading.h"
+#include "scene.h"
 
 typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 
@@ -34,9 +35,10 @@ RWBuffer<uint> g_index_buffer : register(u0);
 RWBuffer<float> g_vertex_buffer : register(u1);
 RWBuffer<float> g_normal_buffer : register(u2);
 RWBuffer<float2> g_texcoord_buffer : register(u3);
-RWTexture2D<float4> g_output_color_direct : register(u4);
-RWTexture2D<float4> g_output_color_indirect : register(u5);
-RWTexture2D<float4> g_output_gbuffer : register(u6);
+RWStructuredBuffer<Mesh> g_mesh_buffer : register(u4);
+RWTexture2D<float4> g_output_color_direct : register(u5);
+RWTexture2D<float4> g_output_color_indirect : register(u6);
+RWTexture2D<float4> g_output_gbuffer : register(u7);
 
 float3 CalculateDirectIllumination(float3 v, float3 n)
 {
@@ -108,21 +110,26 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     uint prim_index = PrimitiveIndex();
     uint instance_index = InstanceIndex();
 
-    uint i0 = g_index_buffer[3 * prim_index + 0];
-    uint i1 = g_index_buffer[3 * prim_index + 1];
-    uint i2 = g_index_buffer[3 * prim_index + 2];
+    Mesh mesh = g_mesh_buffer[instance_index];
 
-    float3 v0 = float3(g_vertex_buffer[3 * i0], g_vertex_buffer[3 * i0 + 1], g_vertex_buffer[3 * i0 + 2]);
-    float3 v1 = float3(g_vertex_buffer[3 * i1], g_vertex_buffer[3 * i1 + 1], g_vertex_buffer[3 * i1 + 2]);
-    float3 v2 = float3(g_vertex_buffer[3 * i2], g_vertex_buffer[3 * i2 + 1], g_vertex_buffer[3 * i2 + 2]);
+    uint io = mesh.first_index_offset;
+    uint i0 = g_index_buffer[io + 3 * prim_index + 0];
+    uint i1 = g_index_buffer[io + 3 * prim_index + 1];
+    uint i2 = g_index_buffer[io + 3 * prim_index + 2];
 
-    float2 t0 = g_texcoord_buffer[i0];
-    float2 t1 = g_texcoord_buffer[i1];
-    float2 t2 = g_texcoord_buffer[i2];
+    uint vo = mesh.first_vertex_offset * 3;
+    float3 v0 = float3(g_vertex_buffer[vo + 3 * i0], g_vertex_buffer[vo + 3 * i0 + 1], g_vertex_buffer[vo + 3 * i0 + 2]);
+    float3 v1 = float3(g_vertex_buffer[vo + 3 * i1], g_vertex_buffer[vo + 3 * i1 + 1], g_vertex_buffer[vo + 3 * i1 + 2]);
+    float3 v2 = float3(g_vertex_buffer[vo + 3 * i2], g_vertex_buffer[vo + 3 * i2 + 1], g_vertex_buffer[vo + 3 * i2 + 2]);
 
-    float3 n0 = float3(g_normal_buffer[3 * i0], g_normal_buffer[3 * i0 + 1], g_normal_buffer[3 * i0 + 2]);
-    float3 n1 = float3(g_normal_buffer[3 * i1], g_normal_buffer[3 * i1 + 1], g_normal_buffer[3 * i1 + 2]);
-    float3 n2 = float3(g_normal_buffer[3 * i2], g_normal_buffer[3 * i2 + 1], g_normal_buffer[3 * i2 + 2]);
+    float3 n0 = float3(g_normal_buffer[vo + 3 * i0], g_normal_buffer[vo + 3 * i0 + 1], g_normal_buffer[vo + 3 * i0 + 2]);
+    float3 n1 = float3(g_normal_buffer[vo + 3 * i1], g_normal_buffer[vo + 3 * i1 + 1], g_normal_buffer[vo + 3 * i1 + 2]);
+    float3 n2 = float3(g_normal_buffer[vo + 3 * i2], g_normal_buffer[vo + 3 * i2 + 1], g_normal_buffer[vo + 3 * i2 + 2]);
+
+    vo = mesh.first_vertex_offset;
+    float2 t0 = g_texcoord_buffer[vo + i0];
+    float2 t1 = g_texcoord_buffer[vo + i1];
+    float2 t2 = g_texcoord_buffer[vo + i2];
 
     float2 uv = attr.barycentrics.xy;
     float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
@@ -132,6 +139,9 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     // Output GBuffer data for primary hits.
     if (payload.recursion_depth == 0)
     {
+        // Revert normal if needed.
+        float3 view = normalize(g_camera.position - v);
+        if (dot(view, n) < 0.f) n = -n;
         g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n), 1.f);
         g_output_gbuffer[xy] = float4(n, length(g_camera.position - v));
     }
@@ -175,6 +185,6 @@ void Miss(inout RayPayload payload)
     {
         uint2 xy = DispatchRaysIndex().xy;
         g_output_gbuffer[xy] = 0.f; 
-        g_output_color_direct[xy] = float4(0.f, 0.f, 0.f, 1.f);
+        g_output_color_direct[xy] = float4(1.f, 0.f, 0.f, 1.f);
     }
 }

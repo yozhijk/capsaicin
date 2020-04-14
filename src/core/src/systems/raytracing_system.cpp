@@ -154,13 +154,14 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
     auto tlas = GetSceneTLASComponent(access, entity_query);
     auto camera = GetCamera(access, entity_query);
 
-    auto& meshes = access.Read<MeshComponent>();
+    auto& geometry_storage = world().GetSystem<AssetLoadSystem>().geometry_storage();
 
     GPUSceneData scene_data;
-    scene_data.index_buffer = meshes[0].indices.Get();
-    scene_data.vertex_buffer = meshes[0].vertices.Get();
-    scene_data.normal_buffer = meshes[0].normals.Get();
-    scene_data.texcoord_buffer = meshes[0].texcoords.Get();
+    scene_data.index_buffer = geometry_storage.indices.Get();
+    scene_data.vertex_buffer = geometry_storage.vertices.Get();
+    scene_data.normal_buffer = geometry_storage.normals.Get();
+    scene_data.texcoord_buffer = geometry_storage.texcoords.Get();
+    scene_data.mesh_desc_buffer = geometry_storage.mesh_descs.Get();
 
     auto scene_data_descriptor_table = PopulateSceneDataDescriptorTable(scene_data);
     auto output_descritor_table = PopulateOutputDescriptorTable();
@@ -227,10 +228,10 @@ void RaytracingSystem::InitPipeline()
     // This is a root signature that is  across all raytracing shaders invoked during a DispatchRays() call.
     {
         CD3DX12_DESCRIPTOR_RANGE output_descriptor_range;
-        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 4);
+        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 5);
 
         CD3DX12_DESCRIPTOR_RANGE scene_data_descriptor_range;
-        scene_data_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 0);
+        scene_data_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0);
 
         CD3DX12_DESCRIPTOR_RANGE blue_noise_texture_descriptor_range;
         blue_noise_texture_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
@@ -544,7 +545,7 @@ void RaytracingSystem::Raytrace(ID3D12Resource* scene,
 
     auto shader_record_size =
         align(D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
-    D3D12_DISPATCH_RAYS_DESC dispatch_desc{};
+    D3D12_DISPATCH_RAYS_DESC dispatch_desc {};
     dispatch_desc.HitGroupTable.StartAddress = hitgroup_shader_table->GetGPUVirtualAddress();
     dispatch_desc.HitGroupTable.SizeInBytes = hitgroup_shader_table->GetDesc().Width;
     dispatch_desc.HitGroupTable.StrideInBytes = shader_record_size;
@@ -708,7 +709,7 @@ uint32_t RaytracingSystem::PopulateSceneDataDescriptorTable(GPUSceneData& scene_
 {
     auto& render_system = world().GetSystem<RenderSystem>();
 
-    auto base_index = render_system.AllocateDescriptorRange(4);
+    auto base_index = render_system.AllocateDescriptorRange(5);
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
     uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
@@ -735,6 +736,12 @@ uint32_t RaytracingSystem::PopulateSceneDataDescriptorTable(GPUSceneData& scene_
     uav_desc.Buffer.StructureByteStride = sizeof(XMFLOAT2);
     dx12api().device()->CreateUnorderedAccessView(
         scene_data.texcoord_buffer, nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 3));
+
+    uav_desc.Buffer.NumElements = scene_data.mesh_desc_buffer->GetDesc().Width / sizeof(MeshComponent);
+    uav_desc.Buffer.StructureByteStride = sizeof(MeshComponent);
+    dx12api().device()->CreateUnorderedAccessView(
+        scene_data.mesh_desc_buffer, nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 4));
+
 
     return base_index;
 }
