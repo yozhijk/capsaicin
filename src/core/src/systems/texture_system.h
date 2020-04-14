@@ -18,9 +18,12 @@ public:
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override {}
 
     ComPtr<ID3D12Resource> GetTexture(const std::string& name);
+    ComPtr<ID3D12Resource> GetTexture(uint32_t index);
+    uint32_t GetTextureIndex(const std::string& name);
 
 private:
-    ComPtr<ID3D12Resource> LoadTexture(const std::string& name);
-    std::unordered_map<std::string, ComPtr<ID3D12Resource>> textures_;
+    uint32_t LoadTexture(const std::string& name);
+    std::vector<ComPtr<ID3D12Resource>> textures_;
+    std::unordered_map<std::string, uint32_t> cache_;
 };
 }  // namespace capsaicin

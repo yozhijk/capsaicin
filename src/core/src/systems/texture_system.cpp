@@ -9,20 +9,30 @@ namespace capsaicin
 {
 ComPtr<ID3D12Resource> TextureSystem::GetTexture(const std::string& name)
 {
-    auto it = textures_.find(name);
-    if (it != textures_.cend())
+    auto it = cache_.find(name);
+    if (it == cache_.cend())
     {
-        return it->second.Get();
+        return GetTexture(LoadTexture(name));
     }
-    else
-    {
-        auto texture = LoadTexture(name);
-        textures_[name] = texture;
-        return texture;
-    }
+
+    return GetTexture(it->second);
 }
 
-ComPtr<ID3D12Resource> TextureSystem::LoadTexture(const std::string& name)
+ComPtr<ID3D12Resource> TextureSystem::GetTexture(uint32_t index){ return textures_[index]; }
+
+uint32_t TextureSystem::GetTextureIndex(const std::string& name)
+{
+    auto it = cache_.find(name);
+    if (it == cache_.cend())
+    {
+        auto index = LoadTexture(name);
+        return index;
+    }
+
+    return it->second;
+}
+
+uint32_t TextureSystem::LoadTexture(const std::string& name)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto full_name = std::string("../../../assets/textures/") + name;
@@ -82,6 +92,8 @@ ComPtr<ID3D12Resource> TextureSystem::LoadTexture(const std::string& name)
 
     render_system.PushCommandList(command_list.Get());
 
-    return texture;
+    textures_.push_back(texture);
+
+    return textures_.size() - 1;
 }
 }  // namespace capsaicin
