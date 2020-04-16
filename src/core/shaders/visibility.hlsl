@@ -31,6 +31,8 @@ ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 RaytracingAccelerationStructure g_scene : register(t0);
 Texture2D<uint4> g_blue_noise: register(t1);
+SamplerState g_sampler: register(s0);
+Texture2D<float4> g_textures[]: register(t2);
 RWBuffer<uint> g_index_buffer : register(u0);
 RWBuffer<float> g_vertex_buffer : register(u1);
 RWBuffer<float> g_normal_buffer : register(u2);
@@ -39,8 +41,9 @@ RWStructuredBuffer<Mesh> g_mesh_buffer : register(u4);
 RWTexture2D<float4> g_output_color_direct : register(u5);
 RWTexture2D<float4> g_output_color_indirect : register(u6);
 RWTexture2D<float4> g_output_gbuffer : register(u7);
+RWTexture2D<float4> g_output_gbuffer_albedo: register(u8);
 
-float3 CalculateDirectIllumination(float3 v, float3 n)
+float3 CalculateDirectIllumination(float3 v, float3 n, float3 kd)
 {
     LightSample ss = DirectionalLight_Sample(g_constants.frame_count);
 
@@ -57,7 +60,7 @@ float3 CalculateDirectIllumination(float3 v, float3 n)
 
     if (payload.hit) return 0.f;
 
-    return ss.intensity * Lambert_Evaluate(n, ss.direction) * max(dot(n, ss.direction), 0.0);
+    return ss.intensity * kd * Lambert_Evaluate(n, ss.direction) * max(dot(n, ss.direction), 0.0);
 }
 
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
@@ -108,10 +111,9 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
 {
     uint2 xy = DispatchRaysIndex();
     uint prim_index = PrimitiveIndex();
-    uint instance_index = InstanceIndex();
+    uint instance_index = InstanceID();
 
     Mesh mesh = g_mesh_buffer[instance_index];
-
     uint io = mesh.first_index_offset;
     uint i0 = g_index_buffer[io + 3 * prim_index + 0];
     uint i1 = g_index_buffer[io + 3 * prim_index + 1];
@@ -134,7 +136,11 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     float2 uv = attr.barycentrics.xy;
     float3 n = normalize(n0 * (1.f - uv.x - uv.y) + n1 * uv.x + n2 * uv.y);
     float3 v = v0 * (1.f - uv.x - uv.y) + v1 * uv.x + v2 * uv.y;
+    float2 t = t0 * (1.f - uv.x - uv.y) + t1 * uv.x + t2 * uv.y;
 
+    t.y = 1.f - t.y;
+    float3 kd = mesh.texture_index == ~0u ? 1.f : g_textures[NonUniformResourceIndex(mesh.texture_index)].SampleLevel(g_sampler, t, 0);
+    kd = pow(kd, 2.2f);
 
     // Output GBuffer data for primary hits.
     if (payload.recursion_depth == 0)
@@ -142,12 +148,13 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
         // Revert normal if needed.
         float3 view = normalize(g_camera.position - v);
         if (dot(view, n) < 0.f) n = -n;
-        g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n), 1.f);
+        g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n, kd), 1.f);
         g_output_gbuffer[xy] = float4(n, length(g_camera.position - v));
+        g_output_gbuffer_albedo[xy] = float4(kd, mesh.texture_index);
     }
     else
     {
-        payload.color += payload.throughput * CalculateDirectIllumination(v, n);
+        payload.color += payload.throughput * CalculateDirectIllumination(v, n, kd);
     }
 
     // For all the bounces except the last one, cast extension ray.
@@ -165,6 +172,11 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
         next_ray.TMax = ss.distance;
 
         payload.throughput *= (ss.brdf * max(0.f, dot(n, ss.direction)) / ss.pdf);
+
+        if (payload.recursion_depth != 0)
+        {
+            payload.throughput *= kd;
+        }
 
         // Trace indirect ray.
         ++payload.recursion_depth;
@@ -184,7 +196,8 @@ void Miss(inout RayPayload payload)
     if (payload.recursion_depth == 0)
     {
         uint2 xy = DispatchRaysIndex().xy;
-        g_output_gbuffer[xy] = 0.f; 
+        g_output_gbuffer[xy] = 0.f;
+        g_output_gbuffer_albedo[xy] = 0.f;
         g_output_color_direct[xy] = float4(1.f, 0.f, 0.f, 1.f);
     }
 }

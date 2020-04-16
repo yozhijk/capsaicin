@@ -42,6 +42,7 @@ private:
     void Raytrace(ID3D12Resource* scene,
                   ID3D12Resource* camera,
                   uint32_t scene_data_descriptor_table,
+                  uint32_t scene_textures_descriptor_table,
                   uint32_t internal_descriptor_table,
                   uint32_t output_descriptor_table);
 
@@ -66,6 +67,7 @@ private:
     uint32_t PopulateEAWOutputDescritorTable();
     uint32_t PopulateIndirectTAInputDescritorTable();
     uint32_t PopulateDirectTAInputDescritorTable();
+    uint32_t PopulateSceneTexturesDescriptorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
@@ -102,7 +104,8 @@ private:
     ComPtr<ID3D12Resource> indirect_history_[2] = {nullptr};
     ComPtr<ID3D12Resource> combined_history_[2] = {nullptr};
     // GBuffer data is used for TAA and ping-ponged as well.
-    ComPtr<ID3D12Resource> gbuffer_ = nullptr;
-    ComPtr<ID3D12Resource> prev_gbuffer_ = nullptr;
+    ComPtr<ID3D12Resource> gbuffer_normal_depth_ = nullptr;
+    ComPtr<ID3D12Resource> gbuffer_albedo_ = nullptr;
+    ComPtr<ID3D12Resource> prev_gbuffer_normal_depth_ = nullptr;
 };
 }  // namespace capsaicin

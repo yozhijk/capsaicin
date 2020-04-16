@@ -21,6 +21,9 @@ public:
     ComPtr<ID3D12Resource> GetTexture(uint32_t index);
     uint32_t GetTextureIndex(const std::string& name);
 
+    size_t num_textures() const { return textures_.size(); }
+    ID3D12Resource* texture(uint32_t index) { return textures_[index].Get(); }
+
 private:
     uint32_t LoadTexture(const std::string& name);
     std::vector<ComPtr<ID3D12Resource>> textures_;

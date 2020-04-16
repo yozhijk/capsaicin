@@ -34,7 +34,8 @@ struct MeshComponent
     uint32_t first_index_offset = 0;
 
     uint32_t index = 0;
-    uint32_t padding[3];
+    uint32_t material_index = 0;
+    uint32_t padding[2];
 };
 
 class AssetLoadSystem : public System

@@ -9,7 +9,8 @@ struct Mesh
     uint first_index_offset;
 
     uint index;
-    uint padding[3];
+    uint texture_index;
+    uint2 padding;
 };
  
 

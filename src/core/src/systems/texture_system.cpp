@@ -18,7 +18,7 @@ ComPtr<ID3D12Resource> TextureSystem::GetTexture(const std::string& name)
     return GetTexture(it->second);
 }
 
-ComPtr<ID3D12Resource> TextureSystem::GetTexture(uint32_t index){ return textures_[index]; }
+ComPtr<ID3D12Resource> TextureSystem::GetTexture(uint32_t index) { return textures_[index]; }
 
 uint32_t TextureSystem::GetTextureIndex(const std::string& name)
 {
@@ -53,7 +53,7 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     pitched_desc.Depth = 1;
     pitched_desc.RowPitch = align(res_x * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
-    auto upload_buffer = dx12api().CreateUploadBuffer(pitched_desc.Width * pitched_desc.RowPitch);
+    auto upload_buffer = dx12api().CreateUploadBuffer(pitched_desc.Height * pitched_desc.RowPitch);
     render_system.AddAutoreleaseResource(upload_buffer);
 
     char* mapped_data = nullptr;
@@ -61,8 +61,8 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     for (auto row = 0; row < res_y; ++row)
     {
         memcpy(mapped_data, data, res_x * sizeof(DWORD));
-        mapped_data += pitched_desc.RowPitch;
         data += res_x * sizeof(DWORD);
+        mapped_data += pitched_desc.RowPitch;
     }
     upload_buffer->Unmap(0, nullptr);
 

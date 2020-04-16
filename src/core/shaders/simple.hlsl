@@ -43,5 +43,5 @@ float4 PsMain(VsOutput input) : SV_TARGET
     pixel.x = int(input.uv.x * g_constants.width);
     pixel.y = int((1.f - input.uv.y) * g_constants.height);
     pixel.z = 0;
-    return g_raytraced_texture.Load(pixel);
+    return pow(g_raytraced_texture.Load(pixel), 1.f / 2.2f);
 }

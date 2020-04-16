@@ -4,6 +4,7 @@
 
 #include "src/common.h"
 #include "src/systems/render_system.h"
+#include "src/systems/texture_system.h"
 #include "tiny_obj_loader.h"
 
 using namespace tinyobj;
@@ -16,11 +17,11 @@ namespace
 {
 struct MeshData
 {
-    Entity entity;
     vector<float> positions;
     vector<float> normals;
     vector<float> texcoords;
     vector<uint32_t> indices;
+    std::uint32_t texture_index = ~0u;
 };
 
 // Index comparison operator.
@@ -37,7 +38,7 @@ struct IndexLess
 };
 
 // Load obj file into a single mesh.
-void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
+void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
 {
     attrib_t attrib;
     vector<shape_t> shapes;
@@ -46,7 +47,7 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
     string warn;
     string err;
 
-    bool ret = LoadObj(&attrib, &shapes, &objmaterials, &warn, &err, asset.file_name.c_str(), "");
+    bool ret = LoadObj(&attrib, &shapes, &objmaterials, &warn, &err, asset.file_name.c_str(), "../../../assets/");
 
     if (!err.empty())
     {
@@ -60,15 +61,24 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
         throw std::runtime_error("Couldn't load {}" + asset.file_name);
     }
 
-    mesh_data.positions.clear();
-    mesh_data.normals.clear();
-    mesh_data.texcoords.clear();
-    mesh_data.indices.clear();
-
     map<tinyobj::index_t, uint32_t, IndexLess> index_cache;
+
+    std::vector<uint32_t> texture_indices;
+    for (uint32_t j = 0; j < objmaterials.size(); ++j)
+    {
+        if (!objmaterials[j].diffuse_texname.empty())
+        {
+            std::string path = "";
+            std::string full_name = path + objmaterials[j].diffuse_texname;
+            texture_indices.push_back(world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
+        }
+    }
 
     for (uint32_t shape_index = 0u; shape_index < shapes.size(); ++shape_index)
     {
+        MeshData mesh_data;
+        index_cache.clear();
+
         for (uint32_t i = 0u; i < shapes[shape_index].mesh.indices.size(); ++i)
         {
             auto index = shapes[shape_index].mesh.indices[i];
@@ -112,6 +122,9 @@ void LoadObjFile(AssetComponent& asset, MeshData& mesh_data)
                 }
             }
         }
+
+        mesh_data.texture_index = shapes[shape_index].mesh.material_ids[0];
+        meshes.push_back(mesh_data);
     }
 }
 
@@ -121,14 +134,18 @@ void CreateGeometryStorage(std::vector<MeshData>& mesh_data_array,
                            RenderSystem& render_system)
 {
     std::vector<MeshComponent> meshes;
+
     for (auto& mesh_data : mesh_data_array)
     {
-        auto& mesh_component = world().AddComponent<MeshComponent>(mesh_data.entity);
+        auto entity = world().CreateEntity().AddComponent<MeshComponent>().Build();
+        auto& mesh_component = world().GetComponent<MeshComponent>(entity);
+        // auto& mesh_component = world().AddComponent<MeshComponent>(mesh_data.entity);
         mesh_component.first_vertex_offset = storage.vertex_count;
         mesh_component.first_index_offset = storage.index_count;
         mesh_component.vertex_count = mesh_data.positions.size() / 3;
         mesh_component.index_count = mesh_data.indices.size();
         mesh_component.index = meshes.size();
+        mesh_component.material_index = mesh_data.texture_index;
 
         // Create upload buffers.
         auto vertex_upload_buffer =
@@ -219,14 +236,10 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         upload_command_list_->Close();
     }
 
-    auto& assets = access.Read<AssetComponent>();
-    auto& meshes = access.Read<MeshComponent>();
+    auto& assets = access.Write<AssetComponent>();
 
     // Find entities with AssetComponents which have not been loaded yet.
-    auto entities =
-        entity_query()
-            .Filter([&assets, &meshes](Entity e) { return assets.HasComponent(e) && !meshes.HasComponent(e); })
-            .entities();
+    auto entities = entity_query().Filter([&assets](Entity e) { return assets.HasComponent(e); }).entities();
 
     if (!entities.empty())
     {
@@ -235,8 +248,6 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
 
     if (!entities.empty())
     {
-        upload_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
-
         // Load asset.
         std::vector<MeshData> meshes;
         for (auto e : entities)
@@ -245,12 +256,12 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
             info("AssetLoadSystem: Loading {}", asset.file_name);
 
             MeshData mesh_data;
-            mesh_data.entity = e;
-            LoadObjFile(asset, mesh_data);
+            LoadObjFile(asset, meshes);
 
-            // Add to mesh storage.
-            meshes.push_back(mesh_data);
+            world().DestroyEntity(e);
         }
+
+        upload_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
 
         info("AssetLoadSystem: Allocating GPU buffers");
 
