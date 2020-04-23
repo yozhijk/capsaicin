@@ -18,7 +18,7 @@ LightSample DirectionalLight_Sample(uint count)
 
     LightSample ls;
     ls.direction = normalize(float3(lx, ly, lz));
-    ls.intensity = float3(14.f, 12.f, 10.f) + float3(0.f, 0.f, 2.f + 2.f * cos(t));
+    ls.intensity = 3.f * float3(14.f, 12.f, 10.f) + float3(0.f, 0.f, 2.f + 2.f * cos(t));
     ls.pdf = 1.f;
     ls.distance = 100000.f;
     return ls;

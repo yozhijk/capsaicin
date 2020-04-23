@@ -12,6 +12,5 @@ struct Mesh
     uint texture_index;
     uint2 padding;
 };
- 
 
 #endif // SCENE_H

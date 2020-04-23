@@ -32,7 +32,7 @@ public:
 
 private:
     void InitPipeline();
-    void InitTemporalAccumulatePipeline();
+    void InitTemporalAccumulatePipelines();
     void InitRenderStructures();
     void InitEAWDenoisePipeline();
     void InitCombinePipeline();
@@ -50,10 +50,13 @@ private:
                              ID3D12Resource* prev_camera,
                              uint32_t internal_descriptor_table,
                              uint32_t output_descriptor_table,
-                             uint32_t history_descriptor_table,
-                             ComPtr<ID3D12GraphicsCommandList> ta_command_list,
-                             float alpha,
-                             bool velocity_adjustment);
+                             uint32_t history_descriptor_table);
+
+    void ApplyTAA(ID3D12Resource* camera,
+                  ID3D12Resource* prev_camera,
+                  uint32_t internal_descriptor_table,
+                  uint32_t output_descriptor_table,
+                  uint32_t history_descriptor_table);
 
     void CombineIllumination(uint32_t output_descriptor_table);
 
@@ -73,7 +76,7 @@ private:
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> copy_gbuffer_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> indirect_ta_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> combined_ta_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> taa_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> eaw_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> ci_command_list_ = nullptr;
 
@@ -89,8 +92,12 @@ private:
     ComPtr<ID3D12RootSignature> raytracing_root_signature_ = nullptr;
     ComPtr<ID3D12StateObject> raytracing_pipeline_state_ = nullptr;
 
+    // Temporal accumulation for irradiance buffer.
     ComPtr<ID3D12RootSignature> ta_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> ta_pipeline_state_ = nullptr;
+
+    // Temporal antialiasing.
+    ComPtr<ID3D12PipelineState> taa_pipeline_state_ = nullptr;
 
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;

@@ -193,11 +193,16 @@ void ShadowMiss(inout ShadowRayPayload payload)
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
+    uint2 xy = DispatchRaysIndex().xy;
+
     if (payload.recursion_depth == 0)
     {
-        uint2 xy = DispatchRaysIndex().xy;
         g_output_gbuffer[xy] = 0.f;
         g_output_gbuffer_albedo[xy] = 0.f;
-        g_output_color_direct[xy] = float4(1.f, 0.f, 0.f, 1.f);
+        g_output_color_direct[xy] = float4(0.7f, 0.7f, 0.85f, 1.f);
+    }
+    else
+    {
+        payload.color += payload.throughput * float4(0.7f, 0.7f, 0.85f, 1.f);
     }
 }

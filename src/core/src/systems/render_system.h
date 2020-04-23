@@ -47,8 +47,8 @@ public:
 private:
     static constexpr uint32_t kNumGPUFramesInFlight = 2;
     static constexpr uint32_t kConstantBufferAlignment = 256;
-    static constexpr uint32_t kMaxCommandBuffersPerFrame = 1024;
-    static constexpr uint32_t kMaxUAVDescriptorsPerFrame = 1024;
+    static constexpr uint32_t kMaxCommandBuffersPerFrame = 4096;
+    static constexpr uint32_t kMaxUAVDescriptorsPerFrame = 4096;
 
     // Initialize rendering into main window.
     void InitWindow();

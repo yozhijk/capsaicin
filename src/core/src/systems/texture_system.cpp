@@ -41,6 +41,17 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     int channels;
     auto* data = stbi_load(full_name.c_str(), &res_x, &res_y, &channels, 4);
 
+     uint32_t null_data = 0x00000000;
+    auto* data_ptr = data;
+
+    if (data_ptr == nullptr)
+    {
+        warn("TextureSystem: texture {} missing", full_name);
+        data_ptr = (stbi_uc*)&null_data;
+        res_x = 1;
+        res_y = 1;
+    };
+
     // Create texture in default heap.
     CD3DX12_RESOURCE_DESC texture_desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UINT, res_x, res_y);
     auto texture = dx12api().CreateResource(
@@ -60,11 +71,13 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     upload_buffer->Map(0, nullptr, (void**)&mapped_data);
     for (auto row = 0; row < res_y; ++row)
     {
-        memcpy(mapped_data, data, res_x * sizeof(DWORD));
-        data += res_x * sizeof(DWORD);
+        memcpy(mapped_data, data_ptr, res_x * sizeof(DWORD));
+        data_ptr += res_x * sizeof(DWORD);
         mapped_data += pitched_desc.RowPitch;
     }
     upload_buffer->Unmap(0, nullptr);
+
+    stbi_image_free(data);
 
     D3D12_TEXTURE_COPY_LOCATION src_texture_loc;
     src_texture_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
@@ -93,6 +106,7 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     render_system.PushCommandList(command_list.Get());
 
     textures_.push_back(texture);
+    cache_[name] = textures_.size() - 1;
 
     return textures_.size() - 1;
 }

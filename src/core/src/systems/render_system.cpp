@@ -180,7 +180,7 @@ void RenderSystem::PushCommandList(ComPtr<ID3D12CommandList> command_list)
 {
     auto idx = gpu_frame_data_[current_gpu_frame_index()].num_command_lists.fetch_add(1);
 
-    if (idx > kMaxCommandBuffersPerFrame)
+    if (idx >= kMaxCommandBuffersPerFrame)
     {
         error("RenderSystem: Max number of command buffer exceeded");
         throw std::runtime_error("RenderSystem: Max number of command buffer exceeded");

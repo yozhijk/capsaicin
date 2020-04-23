@@ -22,7 +22,7 @@ float CalculateNormalWeight(float3 n0, float3 n1)
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    return Gaussian(d0, d1, 1.f);
+    return Gaussian(d0, d1, 10.f);
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
@@ -38,6 +38,12 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
     float3 nc = g_gbuffer.Load(int3(gidx, 0)).xyz;
     float  nd = g_gbuffer.Load(int3(gidx, 0)).w;
+
+    if (nd < 1e-5f)
+    {
+        g_output_color[gidx] = g_color[gidx];
+        return;
+    }
 
     const int kRadius = 2;
     for (int dy = -kRadius; dy <= kRadius; ++dy)

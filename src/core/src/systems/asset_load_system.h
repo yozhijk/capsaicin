@@ -34,16 +34,16 @@ struct MeshComponent
     uint32_t first_index_offset = 0;
 
     uint32_t index = 0;
-    uint32_t material_index = 0;
+    uint32_t material_index = ~0u;
     uint32_t padding[2];
 };
 
 class AssetLoadSystem : public System
 {
 public:
-    static constexpr uint32_t kVertexPoolSize = 10000000;
-    static constexpr uint32_t kIndexPoolSize = 10000000;
-    static constexpr uint32_t kMeshPoolSize = 1000;
+    static constexpr uint32_t kVertexPoolSize = 20000000;
+    static constexpr uint32_t kIndexPoolSize = 20000000;
+    static constexpr uint32_t kMeshPoolSize = 10000;
     AssetLoadSystem();
     ~AssetLoadSystem() override = default;
 

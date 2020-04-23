@@ -85,8 +85,8 @@ int main()
 
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
+            //LoadSceneFromOBJ("../../../assets/san-miguel-low-poly.obj");
             LoadSceneFromOBJ("../../../assets/sponza.obj");
-            LoadSceneFromOBJ("../../../assets/cornell_box.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 
