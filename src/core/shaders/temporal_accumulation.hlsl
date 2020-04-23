@@ -113,42 +113,47 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
     return tw > 1e-5f ? (filtered / tw) : 0.f;
 }
 
+// Get history data for a pixel.
 float3 FetchHistory(uint2 xy)
 {
     return ResampleBicubic(g_history, xy);
 }
 
+// Calculate AABB of a 5x5 pixel neighbourhood in YCoCg color space.
 AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
 {
-    const int2 offset[] = 
-    {
-        int2(1, 0),
-        int2(-1, 0),
-        int2(0, 1),
-        int2(0, -1),
-        int2(1, 1),
-        int2(1, -1),
-        int2(-1, 1),
-        int2(-1, -1)
-    };
+    // Radius of the neighbourhood in pixels.
+    const int kNeghbourhoodRadius = 2;
 
+    // Central pixel color.
     float3 center_color =  RGB2YCoCg(SimpleTonemap(g_color[xy].xyz));
-    float3 m1 = center_color;
-    float3 m2 = center_color * center_color;
 
-    for (uint i = 0; i < 8; i++)
+    // Mean and second color moment for accumulation.
+    float3 m1 = 0.f;
+    float3 m2 = 0.f;
+
+    // Go over the neighbourhood.
+    for (int i = -kNeghbourhoodRadius; i <= kNeghbourhoodRadius; i++)
+        for (int j = -kNeghbourhoodRadius; j <= kNeghbourhoodRadius; j++)
     {
-        int2 sxy = clamp(int2(xy) + offset[i], int2(0, 0), int2(g_constants.width-1, g_constants.height-1));
+        // Pixel coordinates of a current sample.
+        int2 sxy = clamp(int2(xy) + int2(i, j), int2(0, 0), int2(g_constants.width-1, g_constants.height-1));
         float3 v = RGB2YCoCg(SimpleTonemap(g_color[sxy].xyz));
+
+        // Update moments.
         m1 += v;
         m2 += v * v;
     }
 
-    m1 *= rcp(9);
-    m2 *= rcp(9);
+    // Both statistical moments require 1 / N division.
+    const int kNumSamples = (2 * kNeghbourhoodRadius + 1) * (2 * kNeghbourhoodRadius + 1);
+    m1 *= rcp(kNumSamples);
+    m2 *= rcp(kNumSamples);
 
+    // Calculate standard deviation.
     float3 dev = sqrt(abs(m2 - m1 * m1)) * scale;
 
+    // Create color bounding box around mean.
     AABB aabb;
     aabb.pmin = min(m1 - dev, center_color);
     aabb.pmax = max(m1 + dev, center_color);
@@ -156,6 +161,7 @@ AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
     return aabb;
 }
 
+// Temporal accumulation kernel for low-frequence GI accumulation.
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Accumulate(in uint2 gidx: SV_DispatchThreadID,
                 in uint2 lidx: SV_GroupThreadID,
@@ -203,6 +209,9 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     }
 }
 
+// Traditional TAA kernel with some optimizations described in 
+// "A Survey of Temporal Antialiasing Techniques" Eurographics 2020, Lei Yang, Shiqiu Liu, Marco Salvi
+// http://behindthepixels.io/assets/files/TemporalAA.pdf
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void TAA(in uint2 gidx: SV_DispatchThreadID,
          in uint2 lidx: SV_GroupThreadID,
@@ -228,28 +237,33 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
+        // Output bicubic filtering in case of a disocclusion.
         g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
     }
     else
     {
+        // Calculate reprojected pixel coordinates and clamp to image extents.
         uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
-        reprojected_xy.x = min(reprojected_xy.x, g_constants.width - 1);
-        reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
-        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
+        reprojected_xy = min(reprojected_xy, uint2(g_constants.width - 1, g_constants.height - 1));
 
-        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
-        // {
-        //     g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
-        //     return;
-        // }
-        float velocity_adjustment = 0;//g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.9, speed/0.1f)) : 0.f;
-        float alpha = g_constants.alpha - velocity_adjustment;
+        // Fetch geometric data to assist rectification.
+        // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
 
+        // Perform velocity adjustment.
+        // float velocity_adjustment = g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.9, speed/0.1f)) : 0.f;
+        float alpha = g_constants.alpha;// - velocity_adjustment;
+
+        // Fetch color and history.
         float3 history = RGB2YCoCg(SimpleTonemap(FetchHistory(reprojected_xy)));
         float3 color = RGB2YCoCg(SimpleTonemap(g_color[gidx].xyz));
 
+        // Calculate neighbourhood color AABB.
         AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, 1.f);
+
+        // Clip history to AABB.
         history = ClipToAABB(color_aabb, history);
+
+        // Blend current sample to history.
         color = InvertSimpleTonemap(YCoCg2RGB(lerp(color, history, alpha)));
 
         g_output_history[gidx] = float4(color, 1.f);

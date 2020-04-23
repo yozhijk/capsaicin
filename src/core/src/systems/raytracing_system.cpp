@@ -646,8 +646,10 @@ void RaytracingSystem::ApplyTAA(ID3D12Resource* camera,
     auto command_allocator = render_system.current_frame_command_allocator();
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
 
-    TAConstants constants{
-        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.99f, 0};
+    TAConstants constants
+    {
+        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.9f, 1
+    };
 
     taa_command_list_->Reset(command_allocator, nullptr);
 
