@@ -18,7 +18,7 @@ struct Camera
     float2 sensor_size;
 };
 
-float2 CalculateImagePlaneCoordinates(in Camera camera, float3 position)
+float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
 {
     // Image plane has a normal vector forward and is passing through the point
     // position + forward * focal_length.
@@ -35,7 +35,6 @@ float2 CalculateImagePlaneCoordinates(in Camera camera, float3 position)
 
     if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
 
-
     // Intersection distance to an image plane.
     float t = dot(n, p - o) / dot(n, d);
 
@@ -46,7 +45,7 @@ float2 CalculateImagePlaneCoordinates(in Camera camera, float3 position)
 
     float u = dot(camera.right, ipd) / (0.5f * camera.sensor_size.x);
     float v = dot(camera.up, ipd) / (0.5f * camera.sensor_size.y);
-    return float2(u, v);
+    return 0.5f * float2(u, v) + 0.5f;
 }
 
 #endif // CAMERA_H

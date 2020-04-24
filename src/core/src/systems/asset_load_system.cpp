@@ -72,6 +72,10 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
             std::string full_name = path + objmaterials[j].diffuse_texname;
             texture_indices.push_back(world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
         }
+        else
+        {
+            texture_indices.push_back(~0u);
+        }
     }
 
     for (uint32_t shape_index = 0u; shape_index < shapes.size(); ++shape_index)
@@ -123,7 +127,11 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
             }
         }
 
-        mesh_data.texture_index = shapes[shape_index].mesh.material_ids[0];
+        mesh_data.texture_index =
+            (shapes[shape_index].mesh.material_ids.empty() || shapes[shape_index].mesh.material_ids[0] == -1)
+                ? ~0u
+                : texture_indices[shapes[shape_index].mesh.material_ids[0]];
+
         meshes.push_back(mesh_data);
     }
 }

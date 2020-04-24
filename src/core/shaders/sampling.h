@@ -3,14 +3,14 @@
 
 #define PI 3.141592653589793238463f
 
-float2 Sample2D_BlueNoise(in Texture2D<uint4> texture, in uint2 xy, in uint count)
+float2 Sample2D_BlueNoise(in Texture2D<float4> texture, in uint2 xy, in uint count)
 {
     // 256 is blue-noise texture size.
-    float2 value =  float2(texture.Load(int3(xy % 256, 0)).xy) / 255.f;
+    float2 value =  float2(texture.Load(int3(xy % 256, 0)).xy);
     return frac(value + 0.61803398875f * count);
 }
 
-float2 Sample2D_BlueNoise4x4(in Texture2D<uint4> texture, in uint2 xy, in uint count)
+float2 Sample2D_BlueNoise4x4(in Texture2D<float4> texture, in uint2 xy, in uint count)
 {
     uint px = (count % 16) % 4;
     uint py = (count % 16) / 4;
@@ -18,9 +18,22 @@ float2 Sample2D_BlueNoise4x4(in Texture2D<uint4> texture, in uint2 xy, in uint c
     uint2 sxy = xy * 4 + uint2(px, py);
 
     // 256 is blue-noise texture size.
-    float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy) / 255.f;
+    float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy);
     return frac(value + 0.61803398875f * (count / 16));
 }
+
+float2 Sample2D_BlueNoise8x8(in Texture2D<float4> texture, in uint2 xy, in uint count)
+{
+    uint px = (count % 64) % 8;
+    uint py = (count % 64) / 8;
+
+    uint2 sxy = xy * 8 + uint2(px, py);
+
+    // 256 is blue-noise texture size.
+    float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy);
+    return frac(value + 0.61803398875f * (count / 64));
+}
+
 
 uint WangHash(in uint2 xy)
 {
@@ -33,7 +46,7 @@ uint WangHash(in uint2 xy)
     return seed;
 }
 
-float2 Sample2D_BlueNoise4x4Stable(in Texture2D<uint4> texture, in uint2 xy, in uint count)
+float2 Sample2D_BlueNoise4x4Stable(in Texture2D<float4> texture, in uint2 xy, in uint count)
 {
     uint px = (count % 16) % 4;
     uint py = (count % 16) / 4;
@@ -41,7 +54,7 @@ float2 Sample2D_BlueNoise4x4Stable(in Texture2D<uint4> texture, in uint2 xy, in 
     uint2 sxy = uint2(px, py);
 
     // 256 is blue-noise texture size.
-    float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy) / 255.f;
+    float2 value =  float2(texture.Load(int3(sxy % 256, 0)).xy);
     return value;
 }
 

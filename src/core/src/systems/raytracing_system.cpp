@@ -648,7 +648,7 @@ void RaytracingSystem::ApplyTAA(ID3D12Resource* camera,
 
     TAConstants constants
     {
-        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.9f, 1
+        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.88f, 1
     };
 
     taa_command_list_->Reset(command_allocator, nullptr);
@@ -839,7 +839,7 @@ uint32_t RaytracingSystem::PopulateInternalDataDescritptorTable()
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
     srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UINT;
+    srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     srv_desc.Texture2D.MipLevels = 1;
     srv_desc.Texture2D.MostDetailedMip = 0;
     srv_desc.Texture2D.PlaneSlice = 0;

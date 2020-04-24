@@ -23,24 +23,39 @@ struct Constants
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 ConstantBuffer<Camera> g_prev_camera : register(b2);
-Texture2D<uint4> g_blue_noise: register(t0);
+Texture2D<float4> g_blue_noise: register(t0);
 RWTexture2D<float4> g_color : register(u0);
 RWTexture2D<float4> g_gbuffer : register(u1);
 RWTexture2D<float4> g_history : register(u2);
 RWTexture2D<float4> g_prev_gbuffer : register(u3);
 RWTexture2D<float4> g_output_history : register(u4);
 
-// This reconstruction is using the same blue-noise sample used by primary visibility pass.
-float3 ReconstructWorldPosition(in uint2 xy)
+
+float2 UVtoXY(in float2 uv)
 {
-    float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
+    float2 xy = uv * float2(g_constants.width, g_constants.height);
+    xy = min(xy, float2(g_constants.width - 1, g_constants.height - 1));
+    return xy;
+}
 
-    // Calculate [0..1] image plane sample
-    uint2 dim = uint2(g_constants.width, g_constants.height);
-    float2 img_sample = (float2(xy) + s) / float2(dim);
+float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv)
+{
+    float2 xy = UVtoXY(uv) - 0.5f;
+    uint2 uxy = uint2(floor(xy));
+    float2 w = frac(xy);
 
+    float3 v00 = texture[uxy].xyz;
+    float3 v01 = texture[uxy + uint2(0, 1)];
+    float3 v10 = texture[uxy + uint2(1, 0)];
+    float3 v11 = texture[uxy + uint2(1, 1)];
+
+    return lerp(lerp(v00, v10, w.x), lerp(v01, v11, w.x), w.y);
+}
+
+float3 ReconstructWorldPosition(in float2 uv)
+{
     // Transform into [-0.5, 0.5]
-    float2 h_sample = img_sample - float2(0.5f, 0.5f);
+    float2 h_sample = uv - float2(0.5f, 0.5f);
     // Transform into [-dim/2, dim/2]
     float2 c_sample = h_sample * g_camera.sensor_size;
 
@@ -49,8 +64,7 @@ float3 ReconstructWorldPosition(in uint2 xy)
     // Origin == camera position + nearz * d
     float3 o = g_camera.position;
 
-    float t = g_gbuffer.Load(int3(xy, 0)).w;
-
+    float t = g_gbuffer.Load(int3(UVtoXY(uv), 0)).w;
     return o + t * d;
 }
 
@@ -78,31 +92,25 @@ float luminance(in float3 rgb)
 }
 
 // Resampling function is using blue-noise sample positions from previous frame.
-float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
+float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv)
 {
     float3 filtered = float3(0.f, 0.f, 0.f);
-    int2 center_xy = uxy;
-    float2 f_center_pos = float2(center_xy) + 0.5f;
+    float2 center_xy = UVtoXY(uv);
     float tw = 0.f;
 
     // 3x3 bicubic filter.
     for (int i = -1; i <= 1; i++)
         for (int j = -1; j <= 1; j++)
         {
-            int2 current_xy = center_xy + int2(i, j);
+            float2 current_xy = center_xy + float2(i, j);
 
-            bool offscreen = any(current_xy < 0) || any(current_xy >= int2(g_constants.width, g_constants.height));
+            bool offscreen = any(current_xy < 0.f) || any(current_xy >= float2(g_constants.width, g_constants.height));
 
             if (!offscreen)
             {
                 float3 value = texture.Load(int3(current_xy, 0)).xyz;
 
-                // Use blue-noise sample position from previous frame.
-                float2 s = 0.5f;
-                float2 f_current_pos = float2(current_xy) + s;
-
-
-                float2 d = abs(f_current_pos - f_center_pos);
+                float2 d = abs(current_xy - center_xy);
                 float w = cubic(d.x, 0, 0.5) * cubic(d.y, 0, 0.5) * rcp(1.f + luminance(value));
 
                 filtered += w * value;
@@ -113,10 +121,14 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in uint2 uxy)
     return tw > 1e-5f ? (filtered / tw) : 0.f;
 }
 
-// Get history data for a pixel.
-float3 FetchHistory(uint2 xy)
+float3 SampleHistory(in float2 uv)
 {
-    return ResampleBicubic(g_history, xy);
+    return SampleBilinear(g_history, uv);
+}
+
+float3 SampleColor(in float2 uv)
+{
+    return SampleBilinear(g_color, uv);
 }
 
 // Calculate AABB of a 5x5 pixel neighbourhood in YCoCg color space.
@@ -170,42 +182,50 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
-    // Reconstruct hit point using depth buffer from the current frame.
-    float3 hit_position = ReconstructWorldPosition(gidx);
+    float2 this_frame_xy = gidx;
+    float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
 
-    // Reconstruct normalized image plane coordinates in the previous frame (-1..1 range).
-    float2 prev_frame_uv = CalculateImagePlaneCoordinates(g_prev_camera, hit_position);
-    float2 this_frame_uv = CalculateImagePlaneCoordinates(g_camera, hit_position);
-    float speed = length(prev_frame_uv - this_frame_uv);
+    // Calculate UV coordinates for this frame.
+    float2 subsample_location = 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, this_frame_xy, g_constants.frame_count);
+    float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
+
+    // Reconstruct hit point using depth buffer from the current frame.
+    float3 hit_position = ReconstructWorldPosition(this_frame_uv);
+
+    // Reconstruct previous frame UV.
+    float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
+    // float speed = length(prev_frame_uv - this_frame_uv);
 
     // Fetch GBuffer data.
-    float4 gbuffer_data = g_gbuffer.Load(int3(gidx, 0));
+    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
 
     // Check if the fragment is outside of previous view frustum or this is first frame.
-    bool disocclusion = any(prev_frame_uv < -1.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
+    bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
         gbuffer_data.w < 1e-5f;
 
     if (disocclusion)
     {
-        g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
+        g_output_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
     }
     else
     {
-        uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
-        reprojected_xy.x = min(reprojected_xy.x, g_constants.width - 1);
-        reprojected_xy.y = min(reprojected_xy.y, g_constants.height - 1);
-        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
+        // Calculate reprojected pixel coordinates and clamp to image extents.
+        float2 prev_frame_xy = UVtoXY(prev_frame_uv);
 
+        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
+
+        // Perform velocity adjustment.
         float alpha = g_constants.alpha;
+
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
         {
-            alpha = 0.2f;
+            alpha = 0.01f;
         }
 
-        float3 history = ResampleBicubic(g_history, reprojected_xy);
-        float3 color = ResampleBicubic(g_color, gidx);
+        float3 history = SampleHistory(prev_frame_uv);
+        float3 color = SampleColor(this_frame_uv);
 
-        g_output_history[gidx] = float4(lerp(color, history, alpha), 1.f);
+        g_output_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), 1.f);
     }
 }
 
@@ -220,42 +240,52 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
-    // Reconstruct hit point using depth buffer from the current frame.
-    float3 hit_position = ReconstructWorldPosition(gidx);
+    // Frame buffer dimensions.
+    float2 this_frame_xy = gidx;
+    float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
 
-    // Reconstruct normalized image plane coordinates in the previous frame (-1..1 range).
-    float2 prev_frame_uv = CalculateImagePlaneCoordinates(g_prev_camera, hit_position);
-    float2 this_frame_uv = CalculateImagePlaneCoordinates(g_camera, hit_position);
-    float speed = length(prev_frame_uv - this_frame_uv);
+    // Calculate UV coordinates for this frame.
+    float2 subsample_location = 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, this_frame_xy, g_constants.frame_count);
+    float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
+
+    // Reconstruct hit point using depth buffer from the current frame.
+    float3 hit_position = ReconstructWorldPosition(this_frame_uv);
+
+    // Reconstruct previous frame UV.
+    float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
+    // float speed = length(prev_frame_uv - this_frame_uv);
 
     // Fetch GBuffer data.
-    float4 gbuffer_data = g_gbuffer.Load(int3(gidx, 0));
+    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
 
     // Check if the fragment is outside of previous view frustum or this is first frame.
-    bool disocclusion = any(prev_frame_uv < -1.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
+    bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
         gbuffer_data.w < 1e-5f;
 
     if (disocclusion)
     {
         // Output bicubic filtering in case of a disocclusion.
-        g_output_history[gidx] = float4(ResampleBicubic(g_color, gidx), 1.f);
+        g_output_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
     }
     else
     {
         // Calculate reprojected pixel coordinates and clamp to image extents.
-        uint2 reprojected_xy = uint2((0.5f * prev_frame_uv + 0.5f) * float2(g_constants.width, g_constants.height));
-        reprojected_xy = min(reprojected_xy, uint2(g_constants.width - 1, g_constants.height - 1));
-
-        // Fetch geometric data to assist rectification.
-        // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(reprojected_xy, 0));
+        float2 prev_frame_xy = UVtoXY(prev_frame_uv);
 
         // Perform velocity adjustment.
-        // float velocity_adjustment = g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.9, speed/0.1f)) : 0.f;
-        float alpha = g_constants.alpha;// - velocity_adjustment;
+        float velocity_adjustment = 0; //g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.3, 0.1f / speed)) : 0.f;
+        float alpha = g_constants.alpha - velocity_adjustment;
+
+        // Fetch geometric data to assist rectification.
+        // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
+        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
+        // {
+        //     alpha = 0.01f;
+        // }
 
         // Fetch color and history.
-        float3 history = RGB2YCoCg(SimpleTonemap(FetchHistory(reprojected_xy)));
-        float3 color = RGB2YCoCg(SimpleTonemap(g_color[gidx].xyz));
+        float3 history = RGB2YCoCg(SimpleTonemap(SampleHistory(prev_frame_uv)));
+        float3 color = RGB2YCoCg(SimpleTonemap(SampleColor(this_frame_uv)));
 
         // Calculate neighbourhood color AABB.
         AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, 1.f);
@@ -266,6 +296,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         // Blend current sample to history.
         color = InvertSimpleTonemap(YCoCg2RGB(lerp(color, history, alpha)));
 
-        g_output_history[gidx] = float4(color, 1.f);
+        // gidx
+        g_output_history[int2(this_frame_xy)] = float4(color, 1.f);
     }
 }

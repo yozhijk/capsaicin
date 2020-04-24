@@ -30,7 +30,7 @@ struct ShadowRayPayload
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
 RaytracingAccelerationStructure g_scene : register(t0);
-Texture2D<uint4> g_blue_noise: register(t1);
+Texture2D<float4> g_blue_noise: register(t1);
 SamplerState g_sampler: register(s0);
 Texture2D<float4> g_textures[]: register(t2);
 RWBuffer<uint> g_index_buffer : register(u0);
@@ -139,7 +139,7 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
     float2 t = t0 * (1.f - uv.x - uv.y) + t1 * uv.x + t2 * uv.y;
 
     t.y = 1.f - t.y;
-    float3 kd = mesh.texture_index == ~0u ? 1.f : g_textures[NonUniformResourceIndex(mesh.texture_index)].SampleLevel(g_sampler, t, 0);
+    float3 kd = (mesh.texture_index == ~0u) ? 1.f : g_textures[NonUniformResourceIndex(mesh.texture_index)].SampleLevel(g_sampler, t, 0);
     kd = pow(kd, 2.2f);
 
     // Output GBuffer data for primary hits.
@@ -170,6 +170,11 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
         next_ray.Origin = v;
         next_ray.TMin = 0.001f;
         next_ray.TMax = ss.distance;
+
+        if (ss.pdf == 0.f)
+        {
+            return;
+        }
 
         payload.throughput *= (ss.brdf * max(0.f, dot(n, ss.direction)) / ss.pdf);
 
