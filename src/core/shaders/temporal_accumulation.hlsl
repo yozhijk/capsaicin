@@ -219,7 +219,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
         {
-            alpha = 0.01f;
+            alpha = 0.1f;
         }
 
         float3 history = SampleHistory(prev_frame_uv);
@@ -245,7 +245,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
 
     // Calculate UV coordinates for this frame.
-    float2 subsample_location = 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, this_frame_xy, g_constants.frame_count);
+    float2 subsample_location = 0.5f;
     float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
 
     // Reconstruct hit point using depth buffer from the current frame.
@@ -280,7 +280,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
         // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
         // {
-        //     alpha = 0.01f;
+        //     alpha = 0.1f;
         // }
 
         // Fetch color and history.
