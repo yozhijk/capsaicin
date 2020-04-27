@@ -86,7 +86,7 @@ int main()
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
             LoadSceneFromOBJ("../../../assets/sponza.obj");
-            // LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");
+            // LoadSceneFromOBJ("../../../assets/vokselia_spawn.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 

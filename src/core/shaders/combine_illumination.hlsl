@@ -22,5 +22,6 @@ void Combine(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
-    g_output_color_indirect[gidx] = g_output_color_indirect[gidx] * g_output_gbuffer_albedo[gidx] + g_output_color_direct[gidx];
+    float4 indirect = float4(g_output_color_indirect[gidx].xyz, 1.f);
+    g_output_color_indirect[gidx] = indirect * g_output_gbuffer_albedo[gidx] + g_output_color_direct[gidx];
 }

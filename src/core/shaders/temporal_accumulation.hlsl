@@ -26,16 +26,22 @@ ConstantBuffer<Camera> g_prev_camera : register(b2);
 Texture2D<float4> g_blue_noise: register(t0);
 RWTexture2D<float4> g_color : register(u0);
 RWTexture2D<float4> g_gbuffer : register(u1);
-RWTexture2D<float4> g_history : register(u2);
-RWTexture2D<float4> g_prev_gbuffer : register(u3);
-RWTexture2D<float4> g_output_history : register(u4);
-
+RWTexture2D<float4> g_color_history : register(u2);
+RWTexture2D<float4> g_moments_history : register(u3);
+RWTexture2D<float4> g_prev_gbuffer : register(u4);
+RWTexture2D<float4> g_output_color_history : register(u5);
+RWTexture2D<float4> g_output_moments_history : register(u6);
 
 float2 UVtoXY(in float2 uv)
 {
     float2 xy = uv * float2(g_constants.width, g_constants.height);
     xy = min(xy, float2(g_constants.width - 1, g_constants.height - 1));
     return xy;
+}
+
+float2 XYtoUV(in float2 xy)
+{
+    return clamp(xy / float2(g_constants.width, g_constants.height), 0.f, 1.f);
 }
 
 float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv)
@@ -86,11 +92,6 @@ float cubic(in float x, in float b, in float c)
     return y / 6.0;
 }
 
-float luminance(in float3 rgb)
-{
-    return dot(rgb, float3(0.299f, 0.587f, 0.114f));
-}
-
 // Resampling function is using blue-noise sample positions from previous frame.
 float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv)
 {
@@ -123,12 +124,19 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv)
 
 float3 SampleHistory(in float2 uv)
 {
-    return SampleBilinear(g_history, uv);
+    return SampleBilinear(g_color_history, uv);
 }
 
 float3 SampleColor(in float2 uv)
 {
     return SampleBilinear(g_color, uv);
+}
+
+float4 SampleMomentsHistory(in float2 uv)
+{
+    float2 xy = UVtoXY(uv) - 0.5f;
+    uint2 uxy = uint2(floor(xy));
+    return g_moments_history[uxy];
 }
 
 // Calculate AABB of a 5x5 pixel neighbourhood in YCoCg color space.
@@ -173,6 +181,46 @@ AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
     return aabb;
 }
 
+float2 CalculateLumaMomentsSpatial(in float2 uv)
+{
+    int2 xy = UVtoXY(uv);
+
+    float4 gbuffer_data = g_gbuffer.Load(int3(xy, 0));
+
+    // Mean and second color moment for accumulation.
+    float2 m = 0.f;
+    float ns = 0.f;
+
+    // Go over the neighbourhood.
+    const uint kNeghbourhoodRadius = 3;
+    for (int i = -kNeghbourhoodRadius; i <= kNeghbourhoodRadius; i++)
+        for (int j = -kNeghbourhoodRadius; j <= kNeghbourhoodRadius; j++)
+    {
+        // Pixel coordinates of a current sample.
+        int2 sxy = int2(xy) + int2(i, j);
+
+        if (any(sxy < 0) || any(sxy > int2(g_constants.width-1, g_constants.height-1)))
+            continue;
+
+        float4 g = g_gbuffer.Load(int3(sxy, 0));
+
+        //if (g.z != gbuffer_data.z || g.w < 1e-5f || 
+            //abs(g.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
+            //continue;
+
+        float v = luminance(SampleColor(XYtoUV(float2(sxy))));
+
+        // Update moments.
+        m += float2(v, v * v);
+        ns += 1.f;
+    }
+
+    if (ns > 0.f)
+        return m * rcp(ns);
+    else
+        return 0.f;
+}
+
 // Temporal accumulation kernel for low-frequence GI accumulation.
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Accumulate(in uint2 gidx: SV_DispatchThreadID,
@@ -186,7 +234,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
 
     // Calculate UV coordinates for this frame.
-    float2 subsample_location = 0.5f;//Sample2D_BlueNoise4x4(g_blue_noise, this_frame_xy, g_constants.frame_count);
+    float2 subsample_location = 0.5f;
     float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
 
     // Reconstruct hit point using depth buffer from the current frame.
@@ -205,27 +253,42 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
-        g_output_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
+        float3 color = SampleColor(this_frame_uv);
+        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
+        g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
+        g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
     }
     else
     {
         // Calculate reprojected pixel coordinates and clamp to image extents.
         float2 prev_frame_xy = UVtoXY(prev_frame_uv);
-
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
 
         // Perform velocity adjustment.
         float alpha = g_constants.alpha;
 
-        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||
+                prev_gbuffer_data.z != gbuffer_data.z)
         {
-            alpha = 0.1f;
+            float3 color = SampleColor(this_frame_uv);
+            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
+
+            g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
+            g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
+            return;
         }
 
         float3 history = SampleHistory(prev_frame_uv);
+        float4 moments_history = SampleMomentsHistory(prev_frame_uv);
         float3 color = SampleColor(this_frame_uv);
+        float luma = luminance(color);
+        float4 moment = float4(luma, luma * luma, 0.f, 1.f);
 
-        g_output_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), 1.f);
+
+        float moments_alpha = alpha;
+        g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, moments_alpha);//moments + float4(luma, luma * luma, 0.f, 1.f);
+        //g_output_moments_history[int2(this_frame_xy)] = moments_history + float4(luma, luma * luma, 0.f, 1.f);
     }
 }
 
@@ -265,7 +328,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     if (disocclusion)
     {
         // Output bicubic filtering in case of a disocclusion.
-        g_output_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
     }
     else
     {
@@ -297,6 +360,6 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         color = InvertSimpleTonemap(YCoCg2RGB(lerp(color, history, alpha)));
 
         // gidx
-        g_output_history[int2(this_frame_xy)] = float4(color, 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
     }
 }

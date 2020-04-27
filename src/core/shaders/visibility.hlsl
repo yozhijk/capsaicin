@@ -3,6 +3,7 @@
 #include "lighting.h"
 #include "shading.h"
 #include "scene.h"
+#include "math_functions.h"
 
 typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 
@@ -80,7 +81,7 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     my_ray.Direction = normalize(g_camera.focal_length * g_camera.forward + c_sample.x * g_camera.right + c_sample.y * g_camera.up);
     // Origin == camera position + nearz * d
     my_ray.Origin = g_camera.position;
-    my_ray.TMin = 0.f;
+    my_ray.TMin = 0.0f;
     my_ray.TMax = 1e6f;
     return my_ray;
 }
@@ -149,7 +150,7 @@ void Hit(inout RayPayload payload, in MyAttributes attr)
         float3 view = normalize(g_camera.position - v);
         if (dot(view, n) < 0.f) n = -n;
         g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n, kd), 1.f);
-        g_output_gbuffer[xy] = float4(n, length(g_camera.position - v));
+        g_output_gbuffer[xy] = float4(OctEncode(n), instance_index, length(g_camera.position - v));
         g_output_gbuffer_albedo[xy] = float4(kd, mesh.texture_index);
     }
     else
