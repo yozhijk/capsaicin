@@ -340,10 +340,10 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         float alpha = g_constants.alpha - velocity_adjustment;
 
         // Fetch geometric data to assist rectification.
-        // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
+        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
         // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
         // {
-        //     alpha = 0.1f;
+        //     alpha = 0.6f;
         // }
 
         // Fetch color and history.

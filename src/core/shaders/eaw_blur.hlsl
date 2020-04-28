@@ -20,18 +20,18 @@ RWTexture2D<float4> g_output_variance : register(u4);
 
 float CalculateNormalWeight(float3 n0, float3 n1)
 {
-    return pow(max(dot(n0, n1), 0.0), 128.f);
+    return pow(max(dot(n0, n1), 0.0), 64.f);
 }
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    return Gaussian(d0, d1, 3.f);
+    return Gaussian(d0, d1, 5.f);
 }
 
 float CalculateLumaWeight(float l0, float l1, float var)
 {
-    float sigma = 20.f * (sqrt(var)) + 1e-5f;
-    return Gaussian(l0, l1, sigma);
+    float v = abs(l0 - l1) / (8.f * sqrt(var) + 1e-8f);
+    return exp(-v);
 }
 
 float CalculateObjectIDWeight(uint id0, uint id1)
@@ -43,13 +43,40 @@ float SampleVariance(in uint2 xy, bool resolve)
 {
     if (resolve)
     {
-        float4 moments = g_variance[xy];// / g_variance[xy].w;
+        float4 moments = g_variance[xy];
         return abs(moments.y - moments.x * moments.x);
     }
     else
     {
         return g_color[xy].w;
     }
+}
+
+float RasampleVariance(in uint2 xy, bool resolve)
+{
+    float var = 0.f;
+    float tw = 0.f;
+    float cv = SampleVariance(xy, resolve);
+
+    const int kRadius = 1;
+    for (int dy = -kRadius; dy <= kRadius; ++dy)
+    {
+        for (int dx = -kRadius; dx <= kRadius; ++dx)
+        {
+            int2 sxy = int2(xy) + int2(dx, dy);
+
+            if (any(sxy < 0) || any(sxy >= int2(g_constants.width, g_constants.height)))
+                continue;
+
+            float v = SampleVariance(sxy, resolve);
+            float w = Gaussian(cv, v, 2.f);
+
+            var += w * v;
+            tw += w;
+        }
+    }
+
+    return var / tw;
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
@@ -72,6 +99,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     float  nd = gc.w;
     uint   id = uint(gc.z);
     float3 cc = g_color[gidx].xyz;
+    float cv = RasampleVariance(gidx, resolve_variance);
 
     if (nd < 1e-5f)
     {
@@ -98,13 +126,15 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
             if (d < 1e-5f) continue;
 
-            float h_weight = 1.f;//kEAWWeights[dy + kRadius] * kEAWWeights[dx + kRadius];
-            float weight = CalculateDepthWeight(nd, d) * CalculateNormalWeight(nc, n) * CalculateLumaWeight(luminance(cc), luminance(g_color[xy].xyz), SampleVariance(xy, resolve_variance));
+            float l_weight = cv < 1e-5 ? 1.f : CalculateLumaWeight(luminance(cc), luminance(g_color[xy].xyz), cv);
+            float h_weight = kEAWWeights[dx + kRadius] * kEAWWeights[dy + kRadius];
+            float weight = CalculateDepthWeight(nd, d) * CalculateNormalWeight(nc, n);
 
-            filtered += weight * h_weight * g_color[xy].xyz;
-            filtered_var += h_weight * h_weight * weight * weight * SampleVariance(xy, resolve_variance);
+            filtered += weight * h_weight * l_weight * g_color[xy].xyz;
+            filtered_var +=
+                h_weight * h_weight * weight * weight * l_weight * l_weight * SampleVariance(xy, resolve_variance);
             tw += weight * h_weight;
-            tw_var += h_weight * h_weight * weight * weight;
+            tw_var += h_weight * h_weight * weight * weight * l_weight * l_weight;
         }
     }
 
