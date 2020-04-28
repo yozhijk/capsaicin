@@ -181,15 +181,17 @@ AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
     return aabb;
 }
 
+// Calculate first and second luminance moments in 7x7 region centered at uv.
 float2 CalculateLumaMomentsSpatial(in float2 uv)
 {
     int2 xy = UVtoXY(uv);
 
-    float4 gbuffer_data = g_gbuffer.Load(int3(xy, 0));
+    // Gbuffer data at kernel center.
+    float4 gc = g_gbuffer.Load(int3(xy, 0));
 
     // Mean and second color moment for accumulation.
     float2 m = 0.f;
-    float ns = 0.f;
+    float num_samples = 0.f;
 
     // Go over the neighbourhood.
     const uint kNeghbourhoodRadius = 3;
@@ -199,29 +201,34 @@ float2 CalculateLumaMomentsSpatial(in float2 uv)
         // Pixel coordinates of a current sample.
         int2 sxy = int2(xy) + int2(i, j);
 
+        // Check out of bounds.
         if (any(sxy < 0) || any(sxy > int2(g_constants.width-1, g_constants.height-1)))
             continue;
 
+        // GBuffer data at current pixel.
         float4 g = g_gbuffer.Load(int3(sxy, 0));
 
+        // TODO: reiterate on GBuffer culling later.
         //if (g.z != gbuffer_data.z || g.w < 1e-5f || 
             //abs(g.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
             //continue;
 
+        // Calculate pixel luminance.
         float v = luminance(SampleColor(XYtoUV(float2(sxy))));
 
         // Update moments.
         m += float2(v, v * v);
-        ns += 1.f;
+        num_samples += 1.f;
     }
 
-    if (ns > 0.f)
-        return m * rcp(ns);
-    else
-        return 0.f;
+    return (num_samples > 0.f) ? (m * rcp(num_samples)) : 0.f;
 }
 
 // Temporal accumulation kernel for low-frequence GI accumulation.
+// The kernel accumulates irradiance as well as 1st and 2nd luminance moments
+// for the successive SVGF denoiser as per:
+// "Spatiotemporal Variance-Guided Filtering: Real-Time Reconstruction for Path-Traced Global Illumination" Schied et Al
+// https://research.nvidia.com/sites/default/files/pubs/2017-07_Spatiotemporal-Variance-Guided-Filtering%3A//svgf_preprint.pdf
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Accumulate(in uint2 gidx: SV_DispatchThreadID,
                 in uint2 lidx: SV_GroupThreadID,
@@ -253,8 +260,11 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
+        // In case of a disocclusion, do bilateral resampling for color
+        // and estimate spatial luma moments, instead of temporal.
         float3 color = SampleColor(this_frame_uv);
         float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
+
         g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
         g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
     }
@@ -267,9 +277,12 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // Perform velocity adjustment.
         float alpha = g_constants.alpha;
 
+        // TODO: this feels as a bad heuristic, reiterate later.
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||
                 prev_gbuffer_data.z != gbuffer_data.z)
         {
+            // In case of a disocclusion, do bilateral resampling for color
+            // and estimate spatial luma moments, instead of temporal.
             float3 color = SampleColor(this_frame_uv);
             float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
 
@@ -278,17 +291,18 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
             return;
         }
 
+        // Fetch history and moments history.
         float3 history = SampleHistory(prev_frame_uv);
         float4 moments_history = SampleMomentsHistory(prev_frame_uv);
+
+        // Prepare current frame data.
         float3 color = SampleColor(this_frame_uv);
         float luma = luminance(color);
         float4 moment = float4(luma, luma * luma, 0.f, 1.f);
 
+        // Perform history blend.
         g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), 1.f);
-
-        float moments_alpha = alpha;
-        g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, moments_alpha);//moments + float4(luma, luma * luma, 0.f, 1.f);
-        //g_output_moments_history[int2(this_frame_xy)] = moments_history + float4(luma, luma * luma, 0.f, 1.f);
+        g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, alpha);
     }
 }
 

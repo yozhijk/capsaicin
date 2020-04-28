@@ -115,6 +115,5 @@ private:
     ComPtr<ID3D12Resource> gbuffer_normal_depth_ = nullptr;
     ComPtr<ID3D12Resource> gbuffer_albedo_ = nullptr;
     ComPtr<ID3D12Resource> prev_gbuffer_normal_depth_ = nullptr;
-    ComPtr<ID3D12Resource> temp_moments_[2] = {nullptr};
 };
 }  // namespace capsaicin

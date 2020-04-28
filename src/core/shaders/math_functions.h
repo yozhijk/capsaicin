@@ -1,6 +1,8 @@
 #ifndef MATH_FUNCTIONS_H
 #define MATH_FUNCTIONS_H
 
+#define EPS 1e-8f
+
 float Gaussian(in float3 x, in float3 m, in float sigma)
 {
     float a = dot(x - m, x - m) / (sigma * sigma);

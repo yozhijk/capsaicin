@@ -367,10 +367,6 @@ void RaytracingSystem::InitPipeline()
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             moments_history_[1] = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            temp_moments_[0] = dx12api().CreateResource(
-                texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            temp_moments_[1] = dx12api().CreateResource(
-                texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // GBuffers.
             texture_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -440,7 +436,7 @@ void RaytracingSystem::InitEAWDenoisePipeline()
     // Global Root Signature
     {
         CD3DX12_DESCRIPTOR_RANGE output_descriptor_range;
-        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0);
+        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 0);
 
         CD3DX12_ROOT_PARAMETER root_entries[EAWDenoisingRootSignature::kNumEntries] = {};
         root_entries[EAWDenoisingRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
@@ -740,7 +736,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table)
     eaw_command_list_->SetComputeRoot32BitConstants(
         EAWDenoisingRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     eaw_command_list_->SetComputeRootDescriptorTable(EAWDenoisingRootSignature::kOutput,
-                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 5));
+                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 4));
     eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
     eaw_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_.Get()));
 
@@ -748,7 +744,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table)
     eaw_command_list_->SetComputeRoot32BitConstants(
         EAWDenoisingRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     eaw_command_list_->SetComputeRootDescriptorTable(EAWDenoisingRootSignature::kOutput,
-                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 10));
+                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 8));
     eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
     eaw_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_indirect_.Get()));
 
@@ -756,7 +752,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table)
     eaw_command_list_->SetComputeRoot32BitConstants(
         EAWDenoisingRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     eaw_command_list_->SetComputeRootDescriptorTable(EAWDenoisingRootSignature::kOutput,
-                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 5));
+                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 4));
     eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
     eaw_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_.Get()));
 
@@ -764,7 +760,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table)
     eaw_command_list_->SetComputeRoot32BitConstants(
         EAWDenoisingRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     eaw_command_list_->SetComputeRootDescriptorTable(EAWDenoisingRootSignature::kOutput,
-                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 10));
+                                                     render_system.GetDescriptorHandleGPU(descriptor_table + 8));
     eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
     eaw_command_list_->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(output_indirect_.Get()));
 
@@ -920,7 +916,7 @@ uint32_t RaytracingSystem::PopulateCombinedHistoryDescritorTable()
 uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
-    auto base_index = render_system.AllocateDescriptorRange(15);
+    auto base_index = render_system.AllocateDescriptorRange(12);
     auto history_index = (render_system.frame_count() + 1) % 2;
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
@@ -938,31 +934,24 @@ uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
         moments_history_[history_index].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 2));
     dx12api().device()->CreateUnorderedAccessView(
         output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 3));
-    dx12api().device()->CreateUnorderedAccessView(
-        temp_moments_[0].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 4));
 
     dx12api().device()->CreateUnorderedAccessView(
-        output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 5));
+        output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 4));
     dx12api().device()->CreateUnorderedAccessView(
-        gbuffer_normal_depth_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 6));
+        gbuffer_normal_depth_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 5));
     dx12api().device()->CreateUnorderedAccessView(
-        temp_moments_[0].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 7));
+        nullptr, nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 6));
+    dx12api().device()->CreateUnorderedAccessView(
+        output_temp_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 7));
+
     dx12api().device()->CreateUnorderedAccessView(
         output_temp_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 8));
     dx12api().device()->CreateUnorderedAccessView(
-        temp_moments_[1].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 9));
-
-
+        gbuffer_normal_depth_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 9));
     dx12api().device()->CreateUnorderedAccessView(
-        output_temp_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 10));
+        nullptr, nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 10));
     dx12api().device()->CreateUnorderedAccessView(
-        gbuffer_normal_depth_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 11));
-    dx12api().device()->CreateUnorderedAccessView(
-        temp_moments_[1].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 12));
-    dx12api().device()->CreateUnorderedAccessView(
-        output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 13));
-    dx12api().device()->CreateUnorderedAccessView(
-        temp_moments_[0].Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 14));
+        output_indirect_.Get(), nullptr, &uav_desc, render_system.GetDescriptorHandleCPU(base_index + 11));
 
     return base_index;
 }
