@@ -110,6 +110,7 @@ private:
     // Temporal history is ping-ponged.
     ComPtr<ID3D12Resource> indirect_history_[2] = {nullptr};
     ComPtr<ID3D12Resource> combined_history_[2] = {nullptr};
+    ComPtr<ID3D12Resource> moments_history_[2] = {nullptr};
     // GBuffer data is used for TAA and ping-ponged as well.
     ComPtr<ID3D12Resource> gbuffer_normal_depth_ = nullptr;
     ComPtr<ID3D12Resource> gbuffer_albedo_ = nullptr;
