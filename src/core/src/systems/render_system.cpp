@@ -4,6 +4,11 @@
 #include "src/systems/asset_load_system.h"
 #include "src/systems/camera_system.h"
 #include "src/systems/tlas_system.h"
+#include "third_party/imgui/imgui.h"
+#include "third_party/imgui/imgui_impl_dx12.h"
+#include "third_party/imgui/imgui_impl_win32.h"
+
+using namespace ImGui;
 
 namespace capsaicin
 {
@@ -13,15 +18,15 @@ RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
 
     // Render target descriptor heap.
     rtv_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kNumGPUFramesInFlight);
+    imgui_descriptor_heap_ = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1);
 
     // Create command allocators: one per GPU frame.
     for (uint32_t i = 0; i < kNumGPUFramesInFlight; ++i)
     {
         gpu_frame_data_[i].command_allocator = dx12api().CreateCommandAllocator();
-        gpu_frame_data_[i].descriptor_heap =
-            dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                                           kMaxUAVDescriptorsPerFrame,
-                                           D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+        gpu_frame_data_[i].descriptor_heap = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                                                                            kMaxUAVDescriptorsPerFrame,
+                                                                            D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
     }
 
     // Init window.
@@ -32,17 +37,23 @@ RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
     // Save descriptor increment for UAVs and RTVs.
     uav_descriptor_increment_ =
         dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    rtv_descriptor_increment_ =
-        dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    rtv_descriptor_increment_ = dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 }
 
-RenderSystem::~RenderSystem() = default;
+RenderSystem::~RenderSystem()
+{
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+}
 
 void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
     ExecuteCommandLists(current_gpu_frame_index());
 
-    ThrowIfFailed(swapchain_->Present(1, 0), "Present failed");
+    RenderGUI();
+
+    ThrowIfFailed(swapchain_->Present(0, 0), "Present failed");
 
     gpu_frame_data_[current_gpu_frame_index()].submission_id = next_submission_id_;
     ThrowIfFailed(dx12api().command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
@@ -57,8 +68,9 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderSystem::current_frame_output_descriptor_handle()
 {
-    CD3DX12_CPU_DESCRIPTOR_HANDLE handle(
-        rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), current_gpu_frame_index(), rtv_descriptor_increment_);
+    CD3DX12_CPU_DESCRIPTOR_HANDLE handle(rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(),
+                                         current_gpu_frame_index(),
+                                         rtv_descriptor_increment_);
     return handle;
 }
 
@@ -99,6 +111,22 @@ void RenderSystem::InitWindow()
             dx12api().device()->CreateRenderTargetView(backbuffers_[i].Get(), nullptr, descriptor_handle);
         }
     }
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    // ImGui::StyleColorsClassic();
+
+    ImGui_ImplWin32_Init(hwnd_);
+    ImGui_ImplDX12_Init(dx12api().device(),
+                        num_gpu_frames_in_flight(),
+                        DXGI_FORMAT_R8G8B8A8_UNORM,
+                        imgui_descriptor_heap_.Get(),
+                        imgui_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(),
+                        imgui_descriptor_heap_->GetGPUDescriptorHandleForHeapStart());
 }
 
 void RenderSystem::WaitForGPUFrame(uint32_t index)
@@ -136,6 +164,31 @@ void RenderSystem::ExecuteCommandLists(uint32_t index)
 
     dx12api().command_queue()->ExecuteCommandLists(num_command_lists, command_lists.data());
     gpu_frame_data_[index].num_command_lists = 0;
+}
+
+void RenderSystem::RenderGUI()
+{
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+
+    static float f = 0.0f;
+    static int counter = 0;
+
+    ImGui::Begin("Hello, world!");  // Create a window called "Hello, world!" and append into it.
+
+    ImGui::Text("This is some useful text.");           // Display some text (you can use a format strings too)
+
+    ImGui::SliderFloat("float", &f, 0.0f, 1.0f);             // Edit 1 float using a slider from 0.0f to 1.0f
+
+    if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when edited/activated)
+        counter++;
+    ImGui::SameLine();
+    ImGui::Text("counter = %d", counter);
+
+    ImGui::Text(
+        "Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::End();
 }
 
 void RenderSystem::AddAutoreleaseResource(ComPtr<ID3D12Resource> resource)

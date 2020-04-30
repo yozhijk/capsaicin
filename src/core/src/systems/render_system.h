@@ -57,6 +57,8 @@ private:
     // Execute all pending command lists for a given frame.
     // (index is from 0 to num_gpu_frames_in_flight()-1).
     void ExecuteCommandLists(uint32_t index);
+    //
+    void RenderGUI();
 
     // Per-frame GPU data.
     struct GPUFrameData
@@ -82,6 +84,9 @@ private:
     ComPtr<ID3D12Fence> frame_submission_fence_ = nullptr;
     // Render target descriptor heap for the swapchain.
     ComPtr<ID3D12DescriptorHeap> rtv_descriptor_heap_ = nullptr;
+    // ImGUI SRV heap.
+    ComPtr<ID3D12DescriptorHeap> imgui_descriptor_heap_ = nullptr;
+
     // Render target chain.
     std::array<ComPtr<ID3D12Resource>, kNumGPUFramesInFlight> backbuffers_ = {nullptr};
     // Window event.

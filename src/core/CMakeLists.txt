@@ -48,4 +48,4 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/third_party/dxc/dxil.dll
         "\$\(OutDir\)/dxil.dll")
 
-target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid tinyobjloader)
+target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid tinyobjloader imgui)
