@@ -71,6 +71,8 @@ private:
     uint32_t PopulateIndirectTAInputDescritorTable();
     uint32_t PopulateDirectTAInputDescritorTable();
     uint32_t PopulateSceneTexturesDescriptorTable();
+    uint32_t PopulateCombineDescriptorTable();
+    uint32_t PopulateTAAInputDescritorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
@@ -82,7 +84,7 @@ private:
 
     ComPtr<ID3D12Resource> output_direct_ = nullptr;
     ComPtr<ID3D12Resource> output_indirect_ = nullptr;
-    ComPtr<ID3D12Resource> output_temp_ = nullptr;
+    ComPtr<ID3D12Resource> output_temp_[2] = {nullptr};
 
     // Shader tables.
     ComPtr<ID3D12Resource> raygen_shader_table = nullptr;
