@@ -19,7 +19,7 @@ RWTexture2D<float4> g_output_color : register(u3);
 // Edge stopping functions.
 float CalculateNormalWeight(float3 n0, float3 n1)
 {
-    const float kNormalSigma = 64.f;
+    const float kNormalSigma = 128.f;
     return pow(max(dot(n0, n1), 0.0), kNormalSigma);
 }
 
@@ -147,7 +147,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             // Calculate luma weight.
             float luma_weight = center_variance < kVarianceEPS ? 1.f : CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
-            float h_weight = kEAWWeights[dx + kRadius] * kEAWWeights[dy + kRadius];
+            float h_weight = 1.f;//kEAWWeights[dx + kRadius] * kEAWWeights[dy + kRadius];
             // Сalculate depth and normal weight.
             float weight = CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
 

@@ -608,7 +608,7 @@ void RaytracingSystem::IntegrateTemporally(ID3D12Resource* camera,
 
     TAConstants constants
     {
-        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.95f, 0
+        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.99f, 0
     };
 
     indirect_ta_command_list_->Reset(command_allocator, nullptr);

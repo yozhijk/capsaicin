@@ -38,7 +38,7 @@ struct IndexLess
 };
 
 // Load obj file into a single mesh.
-void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
+void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool force_single_mesh = false)
 {
     attrib_t attrib;
     vector<shape_t> shapes;
@@ -61,27 +61,35 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
         throw std::runtime_error("Couldn't load {}" + asset.file_name);
     }
 
+    MeshData mesh_data;
     map<tinyobj::index_t, uint32_t, IndexLess> index_cache;
 
     std::vector<uint32_t> texture_indices;
-    for (uint32_t j = 0; j < objmaterials.size(); ++j)
+
+    if (!force_single_mesh)
     {
-        if (!objmaterials[j].diffuse_texname.empty())
+        for (uint32_t j = 0; j < objmaterials.size(); ++j)
         {
-            std::string path = "";
-            std::string full_name = path + objmaterials[j].diffuse_texname;
-            texture_indices.push_back(world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
-        }
-        else
-        {
-            texture_indices.push_back(~0u);
+            if (!objmaterials[j].diffuse_texname.empty())
+            {
+                std::string path = "";
+                std::string full_name = path + objmaterials[j].diffuse_texname;
+                texture_indices.push_back(world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
+            }
+            else
+            {
+                texture_indices.push_back(~0u);
+            }
         }
     }
 
     for (uint32_t shape_index = 0u; shape_index < shapes.size(); ++shape_index)
     {
-        MeshData mesh_data;
-        index_cache.clear();
+        if (!force_single_mesh)
+        {
+            mesh_data = MeshData{};
+            index_cache.clear();
+        }
 
         for (uint32_t i = 0u; i < shapes[shape_index].mesh.indices.size(); ++i)
         {
@@ -127,11 +135,19 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes)
             }
         }
 
-        mesh_data.texture_index =
-            (shapes[shape_index].mesh.material_ids.empty() || shapes[shape_index].mesh.material_ids[0] == -1)
-                ? ~0u
-                : texture_indices[shapes[shape_index].mesh.material_ids[0]];
+        if (!force_single_mesh)
+        {
+            mesh_data.texture_index =
+                (shapes[shape_index].mesh.material_ids.empty() || shapes[shape_index].mesh.material_ids[0] == -1)
+                    ? ~0u
+                    : texture_indices[shapes[shape_index].mesh.material_ids[0]];
 
+            meshes.push_back(mesh_data);
+        }
+    }
+
+    if (force_single_mesh)
+    {
         meshes.push_back(mesh_data);
     }
 }
@@ -263,7 +279,6 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
             auto& asset = world().GetComponent<AssetComponent>(e);
             info("AssetLoadSystem: Loading {}", asset.file_name);
 
-            MeshData mesh_data;
             LoadObjFile(asset, meshes);
 
             world().DestroyEntity(e);
