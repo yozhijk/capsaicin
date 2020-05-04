@@ -23,6 +23,8 @@ add_library(core src/capsaicin.cpp
                  src/systems/input_system.cpp
                  src/systems/texture_system.h
                  src/systems/texture_system.cpp
+                 src/systems/gui_system.h
+                 src/systems/gui_system.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Mouse.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Keyboard.cpp)
 
@@ -48,4 +50,4 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/third_party/dxc/dxil.dll
         "\$\(OutDir\)/dxil.dll")
 
-target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid tinyobjloader)
+target_link_libraries(core PRIVATE project_options project_warnings spdlog::spdlog yecs-lib d3d12 dxgi dxguid tinyobjloader imgui)

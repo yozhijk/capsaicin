@@ -4,6 +4,8 @@
 #include "src/systems/asset_load_system.h"
 #include "src/systems/camera_system.h"
 #include "src/systems/tlas_system.h"
+#include "src/systems/gui_system.h"
+
 
 namespace capsaicin
 {
@@ -18,10 +20,9 @@ RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
     for (uint32_t i = 0; i < kNumGPUFramesInFlight; ++i)
     {
         gpu_frame_data_[i].command_allocator = dx12api().CreateCommandAllocator();
-        gpu_frame_data_[i].descriptor_heap =
-            dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-                                           kMaxUAVDescriptorsPerFrame,
-                                           D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+        gpu_frame_data_[i].descriptor_heap = dx12api().CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                                                                            kMaxUAVDescriptorsPerFrame,
+                                                                            D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
     }
 
     // Init window.
@@ -32,17 +33,21 @@ RenderSystem::RenderSystem(HWND hwnd) : hwnd_(hwnd)
     // Save descriptor increment for UAVs and RTVs.
     uav_descriptor_increment_ =
         dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    rtv_descriptor_increment_ =
-        dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    rtv_descriptor_increment_ = dx12api().device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 }
 
-RenderSystem::~RenderSystem() = default;
+RenderSystem::~RenderSystem()
+{
+}
 
 void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
+    // Get engine settings.
+    auto& settings = access.Write<SettingsComponent>()[0];
+
     ExecuteCommandLists(current_gpu_frame_index());
 
-    ThrowIfFailed(swapchain_->Present(1, 0), "Present failed");
+    ThrowIfFailed(swapchain_->Present(settings.vsync ? 1 : 0, 0), "Present failed");
 
     gpu_frame_data_[current_gpu_frame_index()].submission_id = next_submission_id_;
     ThrowIfFailed(dx12api().command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
@@ -57,8 +62,9 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderSystem::current_frame_output_descriptor_handle()
 {
-    CD3DX12_CPU_DESCRIPTOR_HANDLE handle(
-        rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), current_gpu_frame_index(), rtv_descriptor_increment_);
+    CD3DX12_CPU_DESCRIPTOR_HANDLE handle(rtv_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(),
+                                         current_gpu_frame_index(),
+                                         rtv_descriptor_increment_);
     return handle;
 }
 

@@ -82,6 +82,7 @@ private:
     ComPtr<ID3D12Fence> frame_submission_fence_ = nullptr;
     // Render target descriptor heap for the swapchain.
     ComPtr<ID3D12DescriptorHeap> rtv_descriptor_heap_ = nullptr;
+
     // Render target chain.
     std::array<ComPtr<ID3D12Resource>, kNumGPUFramesInFlight> backbuffers_ = {nullptr};
     // Window event.

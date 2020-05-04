@@ -6,6 +6,7 @@
 #include "systems/blas_system.h"
 #include "systems/render_system.h"
 #include "systems/composite_system.h"
+#include "systems/gui_system.h"
 #include "systems/raytracing_system.h"
 #include "systems/tlas_system.h"
 #include "systems/camera_system.h"
@@ -26,6 +27,7 @@ void Init()
     world().RegisterComponent<BLASComponent>();
     world().RegisterComponent<TLASComponent>();
     world().RegisterComponent<CameraComponent>();
+    world().RegisterComponent<SettingsComponent>();
 
     world().RegisterSystem<AssetLoadSystem>();
     world().RegisterSystem<BLASSystem>();
@@ -52,11 +54,13 @@ void InitRenderSession(void* data)
     world().RegisterSystem<RenderSystem>(params->hwnd);
     world().RegisterSystem<RaytracingSystem>();
     world().RegisterSystem<CompositeSystem>();
+    world().RegisterSystem<GUISystem>(params->hwnd);
 
     world().Precede<TextureSystem, CameraSystem>();
     world().Precede<CameraSystem, RaytracingSystem>();
     world().Precede<RaytracingSystem, CompositeSystem>();
-    world().Precede<CompositeSystem, RenderSystem>();
+    world().Precede<CompositeSystem, GUISystem>();
+    world().Precede<GUISystem, RenderSystem>();
 }
 
 void LoadSceneFromOBJ(const std::string& file_name)
