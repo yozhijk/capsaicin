@@ -63,6 +63,8 @@ private:
 
     void Denoise(uint32_t descriptor_table);
 
+    void SpatialGather(uint32_t descriptor_table);
+
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputDescriptorTable();
     uint32_t PopulateInternalDataDescritptorTable();
@@ -74,6 +76,7 @@ private:
     uint32_t PopulateSceneTexturesDescriptorTable();
     uint32_t PopulateCombineDescriptorTable();
     uint32_t PopulateTAAInputDescritorTable();
+    uint32_t PopulateSpatialGatherDescriptorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
@@ -82,6 +85,7 @@ private:
     ComPtr<ID3D12GraphicsCommandList> taa_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> eaw_command_list_ = nullptr;
     ComPtr<ID3D12GraphicsCommandList> ci_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> sg_command_list_ = nullptr;
 
     ComPtr<ID3D12Resource> output_direct_ = nullptr;
     ComPtr<ID3D12Resource> output_indirect_ = nullptr;
@@ -105,8 +109,8 @@ private:
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
 
-    ComPtr<ID3D12RootSignature> spatial_gather_root_signature_ = nullptr;
-    ComPtr<ID3D12PipelineState> spatial_gather_pipeline_state_ = nullptr;
+    ComPtr<ID3D12RootSignature> sg_root_signature_ = nullptr;
+    ComPtr<ID3D12PipelineState> sg_pipeline_state_ = nullptr;
 
     ComPtr<ID3D12RootSignature> ci_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> ci_pipeline_state_ = nullptr;

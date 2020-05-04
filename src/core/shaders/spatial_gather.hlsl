@@ -15,9 +15,19 @@ RWTexture2D<float4> g_color : register(u0);
 RWTexture2D<float4> g_gbuffer : register(u1);
 RWTexture2D<float4> g_output_color : register(u2);
 
-// Edge-avoding a-trous wavelet blur with edge stoping functions, part of
-// "Spatiotemporal Variance-Guided Filtering: Real-Time Reconstruction for Path-Traced Global Illumination" Schied et Al
-// https://research.nvidia.com/sites/default/files/pubs/2017-07_Spatiotemporal-Variance-Guided-Filtering%3A//svgf_preprint.pdf
+float CalculateNormalWeight(float3 n0, float3 n1)
+{
+    const float kNormalSigma = 128.f;
+    return pow(max(dot(n0, n1), 0.0), kNormalSigma);
+}
+
+float CalculateDepthWeight(float d0, float d1)
+{
+    const float kDepthSigma = 5.f;
+    return Gaussian(d0, d1, kDepthSigma);
+}
+
+
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Gather(in uint2 gidx: SV_DispatchThreadID,
             in uint2 lidx: SV_GroupThreadID,
@@ -41,10 +51,8 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
         return;
     }
 
-    const float kWeights[5] = {1.f / 16.f, 1.f / 4.f, 3.f / 8.f, 1.f / 4.f, 1.f / 16.f};
-
     // Filter neighbourhood.
-    const int kRadius = 2;
+    const int kRadius = 3;
     for (int dy = -kRadius; dy <= kRadius; ++dy)
     {
         for (int dx = -kRadius; dx <= kRadius; ++dx)
@@ -62,12 +70,12 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
             float  d = g.w;
 
             // Skip background.
-            if (d < 1e-5f)
+            if (d < 1e-5f || g.z != center_g.z)
             {
                 continue;
             }
 
-            float weight = 1.f;
+            float weight = CalculateNormalWeight(center_n, n);
 
             filtered_color += weight * c;
 

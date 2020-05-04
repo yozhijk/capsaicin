@@ -205,7 +205,7 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
     float num_samples = 0.f;
 
     // Go over the neighbourhood.
-    const uint kNeghbourhoodRadius = 3;
+    const int kNeghbourhoodRadius = 3;
     for (int i = -kNeghbourhoodRadius; i <= kNeghbourhoodRadius; i++)
         for (int j = -kNeghbourhoodRadius; j <= kNeghbourhoodRadius; j++)
     {
@@ -222,9 +222,11 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
         float4 g = g_gbuffer.Load(int3(sxy, 0));
 
         // TODO: reiterate on GBuffer culling later.
-        //if (g.z != gbuffer_data.z || g.w < 1e-5f || 
-            //abs(g.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
-            //continue;
+        if (g.z != gc.z || g.w < 1e-5f || 
+            abs(g.w - gc.w) / gc.w > 0.05f)
+        {
+            continue;
+        }
 
         // Calculate pixel luminance.
         float v = luminance(SampleColorPoint(XYtoUV(float2(sxy), dim), dim));
@@ -234,7 +236,7 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
         num_samples += 1.f;
     }
 
-    return (num_samples > 0.f) ? (m * rcp(num_samples)) : 0.f;
+    return(num_samples > 0.f) ? (m * rcp(num_samples)) : 0.f;
 }
 
 // Temporal accumulation kernel for low-frequence GI accumulation.

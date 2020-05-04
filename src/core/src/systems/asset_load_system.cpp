@@ -277,6 +277,7 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         for (auto e : entities)
         {
             auto& asset = world().GetComponent<AssetComponent>(e);
+
             info("AssetLoadSystem: Loading {}", asset.file_name);
 
             LoadObjFile(asset, meshes);

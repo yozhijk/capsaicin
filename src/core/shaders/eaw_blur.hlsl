@@ -145,7 +145,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             }
 
             // Calculate luma weight.
-            float luma_weight = center_variance < kVarianceEPS ? 1.f : CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
+            float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
             float h_weight = 1.f;//kEAWWeights[dx + kRadius] * kEAWWeights[dy + kRadius];
             // Сalculate depth and normal weight.
