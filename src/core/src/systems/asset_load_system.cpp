@@ -105,9 +105,9 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
                 mesh_data.indices.push_back(vertex_index);
                 index_cache[index] = vertex_index;
 
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index]);
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 1]);
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 2]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index + 1]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index + 2]);
 
                 if (index.normal_index != -1)
                 {
@@ -274,12 +274,14 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
     {
         // Load asset.
         std::vector<MeshData> meshes;
+
         for (auto e : entities)
         {
             auto& asset = world().GetComponent<AssetComponent>(e);
+
             info("AssetLoadSystem: Loading {}", asset.file_name);
 
-            LoadObjFile(asset, meshes);
+            LoadObjFile(asset, meshes, true);
 
             world().DestroyEntity(e);
         }
