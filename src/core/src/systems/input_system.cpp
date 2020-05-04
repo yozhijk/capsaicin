@@ -3,6 +3,10 @@
 #include "capsaicin.h"
 #include "src/common.h"
 #include "src/systems/camera_system.h"
+#include "src/systems/gui_system.h"
+#include "src/systems/render_system.h"
+
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace capsaicin
 {
@@ -31,7 +35,10 @@ void InputSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Su
 
 void InputSystem::ProcessInput(void* input)
 {
+    auto& render_system = world().GetSystem<RenderSystem>();
+
     Input* w32input = reinterpret_cast<Input*>(input);
+    ImGui_ImplWin32_WndProcHandler(render_system.hwnd(), w32input->message, w32input->wparam, w32input->lparam);
     Keyboard::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);
     Mouse::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);
 }

@@ -23,6 +23,8 @@ add_library(core src/capsaicin.cpp
                  src/systems/input_system.cpp
                  src/systems/texture_system.h
                  src/systems/texture_system.cpp
+                 src/systems/gui_system.h
+                 src/systems/gui_system.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Mouse.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Keyboard.cpp)
 
