@@ -32,21 +32,21 @@ RWTexture2D<float4> g_prev_gbuffer : register(u4);
 RWTexture2D<float4> g_output_color_history : register(u5);
 RWTexture2D<float4> g_output_moments_history : register(u6);
 
-float2 UVtoXY(in float2 uv)
+float2 UVtoXY(in float2 uv, in uint2 dim)
 {
-    float2 xy = uv * float2(g_constants.width, g_constants.height);
-    xy = min(xy, float2(g_constants.width - 1, g_constants.height - 1));
+    float2 xy = uv * float2(dim);
+    xy = min(xy, float2(dim.x - 1, dim.y - 1));
     return xy;
 }
 
-float2 XYtoUV(in float2 xy)
+float2 XYtoUV(in float2 xy, in uint2 dim)
 {
-    return clamp(xy / float2(g_constants.width, g_constants.height), 0.f, 1.f);
+    return clamp(xy / float2(dim), 0.f, 1.f);
 }
 
-float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv)
+float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv, in uint2 dim)
 {
-    float2 xy = UVtoXY(uv) - 0.5f;
+    float2 xy = UVtoXY(uv, dim) - 0.5f;
     uint2 uxy = uint2(floor(xy));
     float2 w = frac(xy);
 
@@ -60,6 +60,8 @@ float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv)
 
 float3 ReconstructWorldPosition(in float2 uv)
 {
+    uint2 frame_buffer_size = uint2(g_constants.width, g_constants.height);
+
     // Transform into [-0.5, 0.5]
     float2 h_sample = uv - float2(0.5f, 0.5f);
     // Transform into [-dim/2, dim/2]
@@ -70,7 +72,7 @@ float3 ReconstructWorldPosition(in float2 uv)
     // Origin == camera position + nearz * d
     float3 o = g_camera.position;
 
-    float t = g_gbuffer.Load(int3(UVtoXY(uv), 0)).w;
+    float t = g_gbuffer.Load(int3(UVtoXY(uv, frame_buffer_size), 0)).w;
     return o + t * d;
 }
 
@@ -93,60 +95,69 @@ float cubic(in float x, in float b, in float c)
 }
 
 // Resampling function is using blue-noise sample positions from previous frame.
-float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv)
-{
-    float3 filtered = float3(0.f, 0.f, 0.f);
-    float2 center_xy = UVtoXY(uv);
-    float tw = 0.f;
+// float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv)
+// {
+//     float3 filtered = float3(0.f, 0.f, 0.f);
+//     float2 center_xy = UVtoXY(uv);
+//     float tw = 0.f;
 
-    // 3x3 bicubic filter.
-    for (int i = -1; i <= 1; i++)
-        for (int j = -1; j <= 1; j++)
-        {
-            float2 current_xy = center_xy + float2(i, j);
+//     // 3x3 bicubic filter.
+//     for (int i = -1; i <= 1; i++)
+//         for (int j = -1; j <= 1; j++)
+//         {
+//             float2 current_xy = center_xy + float2(i, j);
 
-            bool offscreen = any(current_xy < 0.f) || any(current_xy >= float2(g_constants.width, g_constants.height));
+//             bool offscreen = any(current_xy < 0.f) || any(current_xy >= float2(g_constants.width, g_constants.height));
 
-            if (!offscreen)
-            {
-                float3 value = texture.Load(int3(current_xy, 0)).xyz;
+//             if (!offscreen)
+//             {
+//                 float3 value = texture.Load(int3(current_xy, 0)).xyz;
 
-                float2 d = abs(current_xy - center_xy);
-                float w = cubic(d.x, 0, 0.5) * cubic(d.y, 0, 0.5) * rcp(1.f + luminance(value));
+//                 float2 d = abs(current_xy - center_xy);
+//                 float w = cubic(d.x, 0, 0.5) * cubic(d.y, 0, 0.5) * rcp(1.f + luminance(value));
 
-                filtered += w * value;
-                tw += w;
-            }
-        }
+//                 filtered += w * value;
+//                 tw += w;
+//             }
+//         }
 
-    return tw > 1e-5f ? (filtered / tw) : 0.f;
-}
+//     return tw > 1e-5f ? (filtered / tw) : 0.f;
+// }
 
 float3 SampleHistory(in float2 uv)
 {
-    return SampleBilinear(g_color_history, uv);
+    return SampleBilinear(g_color_history, uv, uint2(g_constants.width, g_constants.height));
 }
 
-float3 SampleColor(in float2 uv)
+float3 SampleColor(in float2 uv, in uint2 dim)
 {
-    return SampleBilinear(g_color, uv);
+    return SampleBilinear(g_color, uv, dim);
+}
+
+float3 SampleColorPoint(in float2 uv, in uint2 dim)
+{
+    float2 xy = UVtoXY(uv, dim);
+    uint2 uxy = uint2(floor(xy));
+    return g_color[uxy].xyz;
 }
 
 float4 SampleMomentsHistory(in float2 uv)
 {
-    float2 xy = UVtoXY(uv) - 0.5f;
+    uint2 frame_buffer_size = uint2(g_constants.width, g_constants.height);
+
+    float2 xy = UVtoXY(uv, frame_buffer_size);
     uint2 uxy = uint2(floor(xy));
     return g_moments_history[uxy];
 }
 
 // Calculate AABB of a 5x5 pixel neighbourhood in YCoCg color space.
-AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
+AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in uint2 dim, in float scale)
 {
     // Radius of the neighbourhood in pixels.
     const int kNeghbourhoodRadius = 2;
 
     // Central pixel color.
-    float3 center_color =  RGB2YCoCg(SimpleTonemap(g_color[xy].xyz));
+    float3 center_color =  RGB2YCoCg(SimpleTonemap(SampleColor(XYtoUV(xy, dim), dim)));
 
     // Mean and second color moment for accumulation.
     float3 m1 = 0.f;
@@ -158,7 +169,7 @@ AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
     {
         // Pixel coordinates of a current sample.
         int2 sxy = clamp(int2(xy) + int2(i, j), int2(0, 0), int2(g_constants.width-1, g_constants.height-1));
-        float3 v = RGB2YCoCg(SimpleTonemap(g_color[sxy].xyz));
+        float3 v = RGB2YCoCg(SimpleTonemap(SampleColor(XYtoUV(sxy, dim), dim)));
 
         // Update moments.
         m1 += v;
@@ -182,9 +193,9 @@ AABB CalculateNeighbourhoodColorAABB(in uint2 xy, in float scale)
 }
 
 // Calculate first and second luminance moments in 7x7 region centered at uv.
-float2 CalculateLumaMomentsSpatial(in float2 uv)
+float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
 {
-    int2 xy = UVtoXY(uv);
+    int2 xy = UVtoXY(uv, dim);
 
     // Gbuffer data at kernel center.
     float4 gc = g_gbuffer.Load(int3(xy, 0));
@@ -202,8 +213,10 @@ float2 CalculateLumaMomentsSpatial(in float2 uv)
         int2 sxy = int2(xy) + int2(i, j);
 
         // Check out of bounds.
-        if (any(sxy < 0) || any(sxy > int2(g_constants.width-1, g_constants.height-1)))
+        if (any(sxy < 0) || any(sxy > int2(dim.x - 1, dim.y - 1)))
+        {
             continue;
+        }
 
         // GBuffer data at current pixel.
         float4 g = g_gbuffer.Load(int3(sxy, 0));
@@ -214,7 +227,7 @@ float2 CalculateLumaMomentsSpatial(in float2 uv)
             //continue;
 
         // Calculate pixel luminance.
-        float v = luminance(SampleColor(XYtoUV(float2(sxy))));
+        float v = luminance(SampleColorPoint(XYtoUV(float2(sxy), dim), dim));
 
         // Update moments.
         m += float2(v, v * v);
@@ -239,6 +252,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     float2 this_frame_xy = gidx;
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
+    float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
+    //float2 input_buffer_size = float2(g_constants.width, g_constants.height);
 
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
@@ -249,7 +264,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     // Reconstruct previous frame UV.
     float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
-    // float speed = length(prev_frame_uv - this_frame_uv);
+    float speed = length(prev_frame_uv - this_frame_uv);
 
     // Fetch GBuffer data.
     float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
@@ -262,8 +277,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     {
         // In case of a disocclusion, do bilateral resampling for color
         // and estimate spatial luma moments, instead of temporal.
-        float3 color = SampleColor(this_frame_uv);
-        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
+        float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
+        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
 
         g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
         g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
@@ -271,11 +286,13 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     else
     {
         // Calculate reprojected pixel coordinates and clamp to image extents.
-        float2 prev_frame_xy = UVtoXY(prev_frame_uv);
+        float2 prev_frame_xy = UVtoXY(prev_frame_uv, frame_buffer_size);
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
 
         // Perform velocity adjustment.
-        float alpha = g_constants.alpha;
+        //float alpha = g_constants.alpha;
+        float velocity_adjustment = max(0.f, 1.f - 0.1f / speed);
+        float alpha = max(0.1f, g_constants.alpha - velocity_adjustment);
 
         // TODO: this feels as a bad heuristic, reiterate later.
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||
@@ -283,8 +300,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         {
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.
-            float3 color = SampleColor(this_frame_uv);
-            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv);
+            float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
+            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
 
             g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
             g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
@@ -296,7 +313,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         float4 moments_history = SampleMomentsHistory(prev_frame_uv);
 
         // Prepare current frame data.
-        float3 color = SampleColor(this_frame_uv);
+        float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
         float luma = luminance(color);
         float4 moment = float4(luma, luma * luma, 0.f, 1.f);
 
@@ -342,12 +359,12 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     if (disocclusion)
     {
         // Output bicubic filtering in case of a disocclusion.
-        g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv), 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv, frame_buffer_size), 1.f);
     }
     else
     {
         // Calculate reprojected pixel coordinates and clamp to image extents.
-        float2 prev_frame_xy = UVtoXY(prev_frame_uv);
+        float2 prev_frame_xy = UVtoXY(prev_frame_uv, frame_buffer_size);
 
         // Perform velocity adjustment.
         float velocity_adjustment = 0; //g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.3, 0.1f / speed)) : 0.f;
@@ -355,17 +372,17 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
 
         // Fetch geometric data to assist rectification.
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
-        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
-        // {
-        //     alpha = 0.6f;
-        // }
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f)
+        {
+             alpha = 0.6f;
+        }
 
         // Fetch color and history.
         float3 history = RGB2YCoCg(SimpleTonemap(SampleHistory(prev_frame_uv)));
-        float3 color = RGB2YCoCg(SimpleTonemap(SampleColor(this_frame_uv)));
+        float3 color = RGB2YCoCg(SimpleTonemap(SampleColor(this_frame_uv, frame_buffer_size)));
 
         // Calculate neighbourhood color AABB.
-        AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, 1.f);
+        AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, frame_buffer_size, 1.f);
 
         // Clip history to AABB.
         history = ClipToAABB(color_aabb, history);

@@ -97,8 +97,7 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     payload.recursion_depth = 0;
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE, ~0, 0, 0, 0, ray, payload);
 
-    uint2 output_xy = DispatchRaysIndex();
-
+    uint2 output_xy = DispatchRaysIndex() >> 1;
     g_output_color_indirect[output_xy] = float4(payload.color, 1.f);
 }
 
@@ -154,6 +153,8 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     {
         // Revert normal if needed.
         float3 view = normalize(g_camera.position - v);
+
+        // if (dot(view, n) < 0.f) n = -n;
         g_output_color_direct[xy] = float4(CalculateDirectIllumination(v, n, kd), 1.f);
         g_output_gbuffer[xy] = float4(OctEncode(n), instance_index, length(g_camera.position - v));
         g_output_gbuffer_albedo[xy] = float4(kd, mesh.texture_index);
@@ -163,8 +164,13 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
         payload.color += payload.throughput * CalculateDirectIllumination(v, n, kd);
     }
 
+    uint subsample_index = g_constants.frame_count % 4;
+    uint y_offset = subsample_index / 2;
+    uint x_offset = subsample_index % 2;
+    bool needs_indirect_trace = ((xy.x % 2) == x_offset && (xy.y % 2) == y_offset);
+
     // For all the bounces except the last one, cast extension ray.
-    if (payload.recursion_depth < 2)
+    if (payload.recursion_depth < 2 && needs_indirect_trace)
     {
         // Add indirect.
         float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
