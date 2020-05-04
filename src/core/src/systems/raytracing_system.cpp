@@ -52,6 +52,17 @@ enum
 };
 }
 
+// Signature for spatial gather pass.
+namespace SpatialGatherRootSignature
+{
+enum
+{
+    kConstants = 0,
+    kOutput,
+    kNumEntries
+};
+}
+
 // Signature for a combine pass.
 namespace CombineIlluminationRootSignature
 {
@@ -145,6 +156,7 @@ RaytracingSystem::RaytracingSystem()
     InitRenderStructures();
     InitTemporalAccumulatePipelines();
     InitEAWDenoisePipeline();
+    //InitSpatialGatherPipeline();
     InitCombinePipeline();
 }
 
@@ -346,8 +358,8 @@ void RaytracingSystem::InitPipeline()
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // Half resolution indirect.
-            texture_desc.Width >>= 1;
-            texture_desc.Height >>= 1;
+            // texture_desc.Width >>= 1;
+            // texture_desc.Height >>= 1;
             output_indirect_ = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
@@ -481,6 +493,28 @@ void RaytracingSystem::InitCombinePipeline()
         "../../../src/core/shaders/combine_illumination.hlsl", "cs_6_3", "Combine");
 
     ci_pipeline_state_ = dx12api().CreateComputePipelineState(shader, ci_root_signature_.Get());
+}
+
+void RaytracingSystem::InitSpatialGatherPipeline()
+{
+    // Global Root Signature
+    {
+        CD3DX12_DESCRIPTOR_RANGE output_descriptor_range;
+        output_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 0);
+
+        CD3DX12_ROOT_PARAMETER root_entries[SpatialGatherRootSignature::kNumEntries] = {};
+        root_entries[SpatialGatherRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
+        root_entries[SpatialGatherRootSignature::kOutput].InitAsDescriptorTable(1, &output_descriptor_range);
+
+        CD3DX12_ROOT_SIGNATURE_DESC desc = {};
+        desc.Init(SpatialGatherRootSignature::kNumEntries, root_entries);
+        spatial_gather_root_signature_ = dx12api().CreateRootSignature(desc);
+    }
+
+    auto shader =
+        ShaderCompiler::instance().CompileFromFile("../../../src/core/shaders/spatial_gather.hlsl", "cs_6_3", "Gather");
+
+    spatial_gather_pipeline_state_ = dx12api().CreateComputePipelineState(shader, spatial_gather_root_signature_.Get());
 }
 
 void RaytracingSystem::CopyGBuffer()

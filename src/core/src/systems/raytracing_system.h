@@ -36,6 +36,7 @@ private:
     void InitRenderStructures();
     void InitEAWDenoisePipeline();
     void InitCombinePipeline();
+    void InitSpatialGatherPipeline();
 
     void CopyGBuffer();
 
@@ -103,6 +104,9 @@ private:
 
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
+
+    ComPtr<ID3D12RootSignature> spatial_gather_root_signature_ = nullptr;
+    ComPtr<ID3D12PipelineState> spatial_gather_pipeline_state_ = nullptr;
 
     ComPtr<ID3D12RootSignature> ci_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> ci_pipeline_state_ = nullptr;

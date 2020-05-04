@@ -97,7 +97,8 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     payload.recursion_depth = 0;
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE, ~0, 0, 0, 0, ray, payload);
 
-    uint2 output_xy = DispatchRaysIndex() >> 1;
+    // uint2 output_xy = DispatchRaysIndex() >> 1;
+    uint2 output_xy = DispatchRaysIndex();
     g_output_color_indirect[output_xy] = float4(payload.color, 1.f);
 }
 
@@ -167,7 +168,7 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     uint subsample_index = g_constants.frame_count % 4;
     uint y_offset = subsample_index / 2;
     uint x_offset = subsample_index % 2;
-    bool needs_indirect_trace = ((xy.x % 2) == x_offset && (xy.y % 2) == y_offset);
+    bool needs_indirect_trace = true;//((xy.x % 2) == x_offset && (xy.y % 2) == y_offset);
 
     // For all the bounces except the last one, cast extension ray.
     if (payload.recursion_depth < 2 && needs_indirect_trace)

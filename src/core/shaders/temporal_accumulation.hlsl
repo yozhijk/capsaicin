@@ -252,8 +252,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     float2 this_frame_xy = gidx;
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
-    float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
-    //float2 input_buffer_size = float2(g_constants.width, g_constants.height);
+    //float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
+    float2 input_buffer_size = float2(g_constants.width, g_constants.height);
 
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
