@@ -47,7 +47,8 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
 
     ExecuteCommandLists(current_gpu_frame_index());
 
-    ThrowIfFailed(swapchain_->Present(settings.vsync ? 1 : 0, 0), "Present failed");
+    auto sync_interval = settings.vsync ? 1 : 0;
+    ThrowIfFailed(swapchain_->Present(sync_interval, 0), "Present failed");
 
     gpu_frame_data_[current_gpu_frame_index()].submission_id = next_submission_id_;
     ThrowIfFailed(dx12api().command_queue()->Signal(frame_submission_fence_.Get(), next_submission_id_++),
