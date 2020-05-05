@@ -239,7 +239,7 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
     return(num_samples > 0.f) ? (m * rcp(num_samples)) : 0.f;
 }
 
-// Temporal accumulation kernel for low-frequence GI accumulation.
+// Temporal accumulation kernel with upscaling for low-frequency GI accumulation.
 // The kernel accumulates irradiance as well as 1st and 2nd luminance moments
 // for the successive SVGF denoiser as per:
 // "Spatiotemporal Variance-Guided Filtering: Real-Time Reconstruction for Path-Traced Global Illumination" Schied et Al
@@ -254,8 +254,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     float2 this_frame_xy = gidx;
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
-    //float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
-    float2 input_buffer_size = float2(g_constants.width, g_constants.height);
+    float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
 
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
@@ -295,6 +294,12 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         //float alpha = g_constants.alpha;
         float velocity_adjustment = max(0.f, 1.f - 0.1f / speed);
         float alpha = max(0.1f, g_constants.alpha - velocity_adjustment);
+
+        // Preserve history if this pixel does not have active samples evaluated in this frame.
+        if (!Interleave2x2(this_frame_xy, g_constants.frame_count))
+        {
+            alpha = 1.f;
+        }
 
         // TODO: this feels as a bad heuristic, reiterate later.
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||

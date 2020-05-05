@@ -78,7 +78,6 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
             float weight = CalculateNormalWeight(center_n, n);
 
             filtered_color += weight * c;
-
             total_weight += weight;
         }
     }

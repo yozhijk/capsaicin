@@ -114,19 +114,29 @@ float3 MapToHemisphere(in float2 s, in float3 n, in float e)
     float3 u = OrthoVector(n);
     float3 v = cross(u, n);
     u = cross(n, v);
-	
+
     // Calculate 2D sample
     float r1 = s.x;
     float r2 = s.y;
-	
+
     // Transform to spherical coordinates
     float sin_psi = sin(2 * PI * r1);
     float cos_psi = cos(2 * PI * r1);
     float cos_theta = pow(1.0 - r2, 1.0 / (e + 1.0));
     float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
-	
+
     // Return the result
     return normalize(u * sin_theta * cos_psi + v * sin_theta * sin_psi + n * cos_theta);
 }
+
+// Interleaves 2x2 tile over 4 frames and returns true for xy active in this frame.
+bool Interleave2x2(in uint2 xy, in uint frame_count)
+{
+    uint subsample_index = frame_count % 4;
+    uint y_offset = subsample_index / 2;
+    uint x_offset = subsample_index % 2;
+    return ((xy.x % 2) == x_offset && (xy.y % 2) == y_offset);
+}
+
 
 #endif // SAMPLING_H

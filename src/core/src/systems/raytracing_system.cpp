@@ -365,8 +365,8 @@ void RaytracingSystem::InitPipeline()
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // Half resolution indirect.
-            // texture_desc.Width >>= 1;
-            // texture_desc.Height >>= 1;
+            texture_desc.Width >>= 1;
+            texture_desc.Height >>= 1;
             output_indirect_ = dx12api().CreateResource(
                 texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
@@ -656,7 +656,7 @@ void RaytracingSystem::IntegrateTemporally(ID3D12Resource* camera,
     auto descriptor_heap = render_system.current_frame_descriptor_heap();
 
     TAConstants constants{
-        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.99f, 0};
+        render_system.window_width(), render_system.window_height(), render_system.frame_count(), 0, 0.97f, 0};
 
     indirect_ta_command_list_->Reset(command_allocator, nullptr);
 
