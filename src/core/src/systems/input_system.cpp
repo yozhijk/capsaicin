@@ -38,6 +38,7 @@ void InputSystem::ProcessInput(void* input)
     auto& render_system = world().GetSystem<RenderSystem>();
 
     Input* w32input = reinterpret_cast<Input*>(input);
+
     ImGui_ImplWin32_WndProcHandler(render_system.hwnd(), w32input->message, w32input->wparam, w32input->lparam);
     Keyboard::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);
     Mouse::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);

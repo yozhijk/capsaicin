@@ -51,17 +51,35 @@ GUISystem::~GUISystem()
 void GUISystem::RenderGUI(SettingsComponent& settings)
 {
     ImGui::Begin("Frame statistics");
-    ImGui::SetWindowSize(ImVec2(300.f, 100.f));
+    ImGui::SetWindowSize(ImVec2(280.f, 290.f));
+    ImGui::SetWindowPos(ImVec2(20.f, 20.f));
 
-    //ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings too)
+    // ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings too)
 
-    //ImGui::SliderFloat("float", &f, 0.0f, 1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
+    // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
 
-    //if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when edited/activated)
+    // if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when
+    // edited/activated)
     //    counter++;
-    //ImGui::SameLine();
-    //ImGui::Text("counter = %d", counter);
-    ImGui::Checkbox("vsync", &settings.vsync);
+    // ImGui::SameLine();
+    // ImGui::Text("counter = %d", counter);
+
+    const char* outputs[] = {"Combined", "Direct", "Indirect", "Variance"};
+
+    ImGui::Checkbox("Vsync", &settings.vsync);
+    ImGui::Separator();
+    ImGui::Checkbox("Enable SVGF", &settings.denoise);
+    ImGui::SliderFloat("Normal sigma", &settings.normal_sigma, 32.f, 1024.f);
+    ImGui::SliderFloat("Depth sigma", &settings.depth_sigma, 0.01f, 5.f);
+    ImGui::SliderFloat("Luminance sigma", &settings.luma_sigma, 0.01f, 20.f);
+    ImGui::Separator();
+    ImGui::Checkbox("Enable spatial gather", &settings.gather);
+    ImGui::Separator();
+    ImGui::SliderFloat("TU feedback", &settings.temporal_upscale_feedback, 0.f, 1.f);
+    ImGui::SliderFloat("TAA feedback", &settings.taa_feedback, 0.f, 1.f);
+    ImGui::Separator();
+    ImGui::Combo("Output", &settings.output, outputs, ARRAYSIZE(outputs), 5);
+    ImGui::Separator();
 
     ImGui::Text(
         "Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);

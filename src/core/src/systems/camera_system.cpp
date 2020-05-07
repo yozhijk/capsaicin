@@ -22,6 +22,7 @@ CameraSystem::CameraSystem()
     auto& camera_component = world().GetComponent<CameraComponent>(e);
 
     camera_component.camera_data.position = XMFLOAT3{0.f, 15.f, 0.f};
+    // camera_component.camera_data.position = XMFLOAT3{26.f, 12.f, -55.f};
     camera_component.camera_data.right = XMFLOAT3{1.f, 0.f, 0.f};
     camera_component.camera_data.forward = XMFLOAT3{0.f, 0.f, 1.f};
     camera_component.camera_data.up = XMFLOAT3{0.f, 1.f, 0.f};
@@ -64,6 +65,11 @@ void CameraSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
 
     // Adjust aspec ration for the camera if needed.
     AdjustCameraAspectBasedOnWindow(camera.camera_data);
+
+    /*info("Camera position: {} {} {}",
+         camera.camera_data.position.x,
+         camera.camera_data.position.y,
+         camera.camera_data.position.z);*/
 
     auto idx = render_system.current_gpu_frame_index();
     auto staging_buffer = camera_staging_buffer_.Get();

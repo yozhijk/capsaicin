@@ -5,7 +5,7 @@ struct Constants
     uint width;
     uint height;
     uint frame_count;
-    uint padding;
+    uint type;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
@@ -22,5 +22,20 @@ void Combine(in uint2 gidx: SV_DispatchThreadID,
         return;
 
     float4 indirect = float4(g_output_color_indirect[gidx].xyz, 1.f);
-    g_output_color_indirect[gidx] = indirect * g_gbuffer_albedo[gidx] + g_output_color_direct[gidx];
+
+    switch (g_constants.type)
+    {
+        case 0:
+            g_output_color_indirect[gidx] = indirect * g_gbuffer_albedo[gidx] + g_output_color_direct[gidx];
+            return;
+        case 1:
+            g_output_color_indirect[gidx] = g_output_color_direct[gidx];
+            return;
+        case 2:
+            g_output_color_indirect[gidx] = indirect;
+            return;
+        case 3:
+            g_output_color_indirect[gidx] = float4(g_output_color_indirect[gidx].www, 1.f);
+            return; 
+    }
 }

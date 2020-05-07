@@ -129,6 +129,13 @@ float3 SampleHistory(in float2 uv)
     return SampleBilinear(g_color_history, uv, uint2(g_constants.width, g_constants.height));
 }
 
+uint GetHistoryLength(in float2 uv)
+{
+    float2 xy = UVtoXY(uv, uint2(g_constants.width, g_constants.height));
+    uint2 uxy = uint2(floor(xy));
+    return g_color_history[uxy].w;
+}
+
 float3 SampleColor(in float2 uv, in uint2 dim)
 {
     return SampleBilinear(g_color, uv, dim);
@@ -249,6 +256,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
                 in uint2 lidx: SV_GroupThreadID,
                 in uint2 bidx: SV_GroupID)
 {
+    const uint kMaxHistoryLength = 32.f;
+
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
@@ -296,10 +305,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         float alpha = max(0.1f, g_constants.alpha - velocity_adjustment);
 
         // Preserve history if this pixel does not have active samples evaluated in this frame.
-        if (!Interleave2x2(this_frame_xy, g_constants.frame_count))
-        {
-            alpha = 1.f;
-        }
+        bool skip_pixel = !Interleave2x2(this_frame_xy, g_constants.frame_count);
 
         // TODO: this feels as a bad heuristic, reiterate later.
         if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||
@@ -318,14 +324,23 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // Fetch history and moments history.
         float3 history = SampleHistory(prev_frame_uv);
         float4 moments_history = SampleMomentsHistory(prev_frame_uv);
+        uint history_length = GetHistoryLength(prev_frame_uv);
 
         // Prepare current frame data.
         float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
         float luma = luminance(color);
         float4 moment = float4(luma, luma * luma, 0.f, 1.f);
 
+        if (history_length < kMaxHistoryLength)
+        {
+            float t = 1.f / history_length;
+            alpha = 1.f - t;
+        }
+
+        if (skip_pixel) alpha = 1.f;
+
         // Perform history blend.
-        g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), history_length + 1);
         g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, alpha);
     }
 }

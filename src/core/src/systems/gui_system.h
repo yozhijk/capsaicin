@@ -8,10 +8,29 @@ using namespace capsaicin::dx12;
 
 namespace capsaicin
 {
+enum OutputType
+{
+    kCombined,
+    kDirect,
+    kIndirect,
+    kVariance
+};
+
 // TODO: remove from here later
 struct SettingsComponent
 {
     bool vsync = false;
+    bool denoise = true;
+    bool gather = true;
+
+    float normal_sigma = 128.f;
+    float depth_sigma = 0.5f;
+    float luma_sigma = 2.f;
+
+    float temporal_upscale_feedback = 0.92f;
+    float taa_feedback = 0.9f;
+
+    int output = kCombined;
 };
 
 class GUISystem : public System
@@ -21,6 +40,7 @@ public:
     ~GUISystem();
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
+
 private:
     void RenderGUI(SettingsComponent& settings);
 

@@ -19,6 +19,8 @@ struct GPUSceneData
     ID3D12Resource* mesh_desc_buffer;
 };
 
+struct SettingsComponent;
+
 class RaytracingSystem : public System
 {
 public:
@@ -51,19 +53,21 @@ private:
                              ID3D12Resource* prev_camera,
                              uint32_t internal_descriptor_table,
                              uint32_t output_descriptor_table,
-                             uint32_t history_descriptor_table);
+                             uint32_t history_descriptor_table,
+                             const SettingsComponent& settings);
 
     void ApplyTAA(ID3D12Resource* camera,
                   ID3D12Resource* prev_camera,
                   uint32_t internal_descriptor_table,
                   uint32_t output_descriptor_table,
-                  uint32_t history_descriptor_table);
+                  uint32_t history_descriptor_table,
+                  const SettingsComponent& settings);
 
-    void CombineIllumination(uint32_t output_descriptor_table);
+    void CombineIllumination(uint32_t output_descriptor_table, const SettingsComponent& settings);
 
-    void Denoise(uint32_t descriptor_table);
+    void Denoise(uint32_t descriptor_table, const SettingsComponent& settings);
 
-    void SpatialGather(uint32_t descriptor_table);
+    void SpatialGather(uint32_t descriptor_table, const SettingsComponent& settings);
 
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputDescriptorTable();
@@ -90,6 +94,7 @@ private:
     ComPtr<ID3D12Resource> output_direct_ = nullptr;
     ComPtr<ID3D12Resource> output_indirect_ = nullptr;
     ComPtr<ID3D12Resource> output_temp_[2] = {nullptr};
+    ComPtr<ID3D12Resource> indirect_temp_ = nullptr;
 
     // Shader tables.
     ComPtr<ID3D12Resource> raygen_shader_table = nullptr;

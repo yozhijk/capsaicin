@@ -285,6 +285,12 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
             world().DestroyEntity(e);
         }
 
+        uint32_t num_triangles = 0u;
+        for (auto& m : meshes) { num_triangles += m.indices.size() / 3; }
+
+        info("AssetLoadSystem: Total triangle count {}", num_triangles);
+        info("AssetLoadSystem: Total instance count {}", meshes.size());
+
         upload_command_list_->Reset(render_system.current_frame_command_allocator(), nullptr);
 
         info("AssetLoadSystem: Allocating GPU buffers");

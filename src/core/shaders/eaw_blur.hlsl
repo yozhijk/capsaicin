@@ -8,6 +8,11 @@ struct Constants
     uint height;
     uint frame_count;
     uint stride;
+
+    float normal_sigma;
+    float depth_sigma;
+    float luma_sigma;
+    float padding;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
@@ -19,20 +24,18 @@ RWTexture2D<float4> g_output_color : register(u3);
 // Edge stopping functions.
 float CalculateNormalWeight(float3 n0, float3 n1)
 {
-    const float kNormalSigma = 128.f;
-    return pow(max(dot(n0, n1), 0.0), kNormalSigma);
+    return pow(max(dot(n0, n1), 0.0), g_constants.normal_sigma);
 }
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    const float kDepthSigma = 5.f;
-    return Gaussian(d0, d1, kDepthSigma);
+    float v = abs(d0 - d1) / (g_constants.depth_sigma * d0);
+    return exp(-v);
 }
 
 float CalculateLumaWeight(float l0, float l1, float var)
 {
-    const float kLumaSigma = 8.f;
-    float v = abs(l0 - l1) / (kLumaSigma * sqrt(var) + 1e-8f);
+    float v = abs(l0 - l1) / ((g_constants.luma_sigma * sqrt(max(0.f, var))) + 1e-5);
     return exp(-v);
 }
 
@@ -117,8 +120,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     }
 
     // EAW filter weights.
-    const float kEAWWeights[5] = {1.f / 16.f, 1.f / 4.f, 3.f / 8.f, 1.f / 4.f, 1.f / 16.f};
-    const float kVarianceEPS = 1e-3f;
+    const float kWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
 
     // Filter neighbourhood.
     const int kRadius = 2;
@@ -147,21 +149,21 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             // Calculate luma weight.
             float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
-            float h_weight = 1.f;//kEAWWeights[dx + kRadius] * kEAWWeights[dy + kRadius];
+            float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
             // Сalculate depth and normal weight.
-            float weight = CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
+            float weight = CalculateDepthWeight(center_d / 100.f, d / 100.f) * CalculateNormalWeight(center_n, n);
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;
             filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
 
-            total_weight += weight * h_weight;
+            total_weight += weight * h_weight * luma_weight;
             total_variance_weight += h_weight * h_weight * weight * weight * luma_weight * luma_weight;
         }
     }
 
     // Output filtered color and variance.
-    center_color = (total_weight < EPS) ? 0.f : (filtered_color / total_weight);
-    center_variance =  (total_variance_weight < EPS) ? 0.f : (filtered_variance / total_variance_weight);
+    center_color = (total_weight < EPS) ? center_color : (filtered_color / total_weight);
+    center_variance =  (total_variance_weight < EPS) ? center_variance : (filtered_variance / total_variance_weight);
     g_output_color[gidx] = float4(center_color, center_variance);
 }
