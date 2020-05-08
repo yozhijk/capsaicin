@@ -165,7 +165,7 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     }
 
     // For all the bounces except the last one, cast extension ray.
-    if (payload.recursion_depth < 1 &&  Interleave2x2(xy, g_constants.frame_count))
+    if (payload.recursion_depth < 2 &&  Interleave2x2(xy, g_constants.frame_count))
     {
         // Add indirect.
         float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);

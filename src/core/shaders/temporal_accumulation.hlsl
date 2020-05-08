@@ -307,8 +307,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // Preserve history if this pixel does not have active samples evaluated in this frame.
         bool skip_pixel = !Interleave2x2(this_frame_xy, g_constants.frame_count);
 
-        // TODO: this feels as a bad heuristic, reiterate later.
-        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05f ||
+        // TODO: this feels as a bad heuristic, reiterate later.    
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.1f ||
                 prev_gbuffer_data.z != gbuffer_data.z)
         {
             // In case of a disocclusion, do bilateral resampling for color
