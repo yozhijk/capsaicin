@@ -12,6 +12,8 @@
 #include "systems/camera_system.h"
 #include "systems/input_system.h"
 #include "systems/texture_system.h"
+#include "systems/voxel_system.h"
+#include "systems/voxel_visualizer_system.h"
 #include "utils/singleton.h"
 #include "yecs/yecs.h"
 
@@ -24,6 +26,7 @@ void Init()
 
     world().RegisterComponent<AssetComponent>();
     world().RegisterComponent<MeshComponent>();
+    world().RegisterComponent<CPUMeshComponent>();
     world().RegisterComponent<BLASComponent>();
     world().RegisterComponent<TLASComponent>();
     world().RegisterComponent<CameraComponent>();
@@ -41,9 +44,9 @@ void Init()
     // so sumbitting it in parallel would be dangerous.
     world().Precede<AssetLoadSystem, BLASSystem>();
     world().Precede<BLASSystem, TLASSystem>();
-    world().Precede<TLASSystem, CameraSystem>();
+    world().Precede<TLASSystem, InputSystem>();
     world().Precede<InputSystem, CameraSystem>();
-    world().Precede<InputSystem, TextureSystem>();
+    world().Precede<CameraSystem, TextureSystem>();
 }
 
 void InitRenderSession(void* data)
@@ -55,9 +58,12 @@ void InitRenderSession(void* data)
     world().RegisterSystem<RaytracingSystem>();
     world().RegisterSystem<CompositeSystem>();
     world().RegisterSystem<GUISystem>(params->hwnd);
+    world().RegisterSystem<VoxelSystem>();
+    world().RegisterSystem<VoxelVisualizerSystem>();
 
-    world().Precede<TextureSystem, CameraSystem>();
-    world().Precede<CameraSystem, RaytracingSystem>();
+    world().Precede<TextureSystem, VoxelSystem>();
+    world().Precede<VoxelSystem, VoxelVisualizerSystem>();
+    world().Precede<VoxelVisualizerSystem, RaytracingSystem>();
     world().Precede<RaytracingSystem, CompositeSystem>();
     world().Precede<CompositeSystem, GUISystem>();
     world().Precede<GUISystem, RenderSystem>();

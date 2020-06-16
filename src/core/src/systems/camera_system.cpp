@@ -66,11 +66,6 @@ void CameraSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     // Adjust aspec ration for the camera if needed.
     AdjustCameraAspectBasedOnWindow(camera.camera_data);
 
-    /*info("Camera position: {} {} {}",
-         camera.camera_data.position.x,
-         camera.camera_data.position.y,
-         camera.camera_data.position.z);*/
-
     auto idx = render_system.current_gpu_frame_index();
     auto staging_buffer = camera_staging_buffer_.Get();
     auto structure_size = align(sizeof(CameraData), RenderSystem::constant_buffer_alignment());

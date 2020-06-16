@@ -7,8 +7,11 @@
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 #include <wrl.h>
+#include <DirectXMath.h>
 
 #include "src/common.h"
+
+using namespace DirectX;
 
 namespace capsaicin::dx12
 {

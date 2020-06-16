@@ -26,6 +26,20 @@ struct GeometryStorage
     uint32_t index_count = 0;
 };
 
+struct MeshData
+{
+    std::vector<float> positions;
+    std::vector<float> normals;
+    std::vector<float> texcoords;
+    std::vector<uint32_t> indices;
+    std::uint32_t texture_index = ~0u;
+};
+
+struct CPUMeshComponent
+{
+    MeshData mesh_data;
+};
+
 struct MeshComponent
 {
     uint32_t vertex_count = 0;
@@ -55,4 +69,4 @@ private:
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
     GeometryStorage storage_;
 };
-}  // namespace capsaicins
+}  // namespace capsaicin

@@ -5,6 +5,8 @@ add_library(core src/capsaicin.cpp
                  src/dx12/shader_compiler.cpp
                  src/utils/singleton.h
                  src/utils/stb_image.h
+                 src/utils/tri_box_test.h
+                 src/utils/voxel.h
                  src/systems/render_system.h
                  src/systems/render_system.cpp
                  src/systems/composite_system.h
@@ -25,6 +27,10 @@ add_library(core src/capsaicin.cpp
                  src/systems/texture_system.cpp
                  src/systems/gui_system.h
                  src/systems/gui_system.cpp
+                 src/systems/voxel_system.h
+                 src/systems/voxel_system.cpp
+                 src/systems/voxel_visualizer_system.h
+                 src/systems/voxel_visualizer_system.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Mouse.cpp
                  ${PROJECT_SOURCE_DIR}/third_party/directxtk/Keyboard.cpp)
 

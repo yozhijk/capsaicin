@@ -15,15 +15,6 @@ namespace capsaicin
 {
 namespace
 {
-struct MeshData
-{
-    vector<float> positions;
-    vector<float> normals;
-    vector<float> texcoords;
-    vector<uint32_t> indices;
-    std::uint32_t texture_index = ~0u;
-};
-
 // Index comparison operator.
 struct IndexLess
 {
@@ -283,6 +274,14 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
             LoadObjFile(asset, meshes);
 
             world().DestroyEntity(e);
+        }
+
+        // Add CPU mesh components for voxelization.
+        for (auto& m : meshes)
+        {
+            auto e = world().CreateEntity().AddComponent<CPUMeshComponent>().Build();
+            auto& cpu_mesh = world().GetComponent<CPUMeshComponent>(e);
+            cpu_mesh.mesh_data = m;
         }
 
         uint32_t num_triangles = 0u;

@@ -1,15 +1,13 @@
 #pragma once
 
-#include <DirectXMath.h>
-
 #include "src/common.h"
+#include "src/dx12/common.h"
 #include "src/dx12/d3dx12.h"
 #include "src/dx12/dx12.h"
 
 #include "src/systems/render_system.h"
 
 using namespace capsaicin::dx12;
-using namespace DirectX;
 
 namespace capsaicin
 {

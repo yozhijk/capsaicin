@@ -3,6 +3,7 @@
 #include "src/common.h"
 #include "src/systems/render_system.h"
 #include "src/systems/raytracing_system.h"
+#include "src/systems/voxel_visualizer_system.h"
 
 namespace capsaicin
 {
@@ -91,6 +92,7 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
+    auto& voxel_vis_system = world().GetSystem<VoxelVisualizerSystem>();
     auto base_index = render_system.AllocateDescriptorRange(1);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
@@ -102,7 +104,7 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
     srv_desc.Texture2D.ResourceMinLODClamp = 0;
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     dx12api().device()->CreateShaderResourceView(
-        raytracing_system.current_frame_output(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
+        voxel_vis_system.output(), &srv_desc, render_system.GetDescriptorHandleCPU(base_index));
     return base_index;
 }
 
@@ -110,6 +112,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
+    auto& voxel_vis_system = world().GetSystem <VoxelVisualizerSystem>();
 
     auto window_width = render_system.window_width();
     auto window_height = render_system.window_height();
@@ -122,7 +125,8 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
     auto rtv_handle = render_system.current_frame_output_descriptor_handle();
     auto backbuffer = render_system.current_frame_output();
-    auto raytracing_output = raytracing_system.current_frame_output();
+    // auto raytracing_output = raytracing_system.current_frame_output();
+    auto raytracing_output = voxel_vis_system.output();
 
     // Resource transitions.
     {
@@ -148,7 +152,7 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
     command_list_->SetGraphicsRoot32BitConstants(RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     command_list_->SetPipelineState(pipeline_state_.Get());
     command_list_->SetGraphicsRootDescriptorTable(RootSignature::kRaytracerOutput,
-                                                 render_system.GetDescriptorHandleGPU(output_srv_index));
+                                                  render_system.GetDescriptorHandleGPU(output_srv_index));
 
     D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width), static_cast<float>(window_height)};
     D3D12_RECT scissor_rect{0, 0, static_cast<LONG>(window_width), static_cast<LONG>(window_height)};
