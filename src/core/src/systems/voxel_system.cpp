@@ -10,7 +10,7 @@ namespace capsaicin
 {
 namespace
 {
-static constexpr uint32_t kResolution = 32;
+static constexpr uint32_t kResolution = 256;
 
 Aabb CalculateAabb(const std::vector<MeshData>& meshes)
 {
