@@ -44,23 +44,23 @@ private:
 
     void Raytrace(ID3D12Resource* scene,
                   ID3D12Resource* camera,
-                  uint32_t scene_data_descriptor_table,
-                  uint32_t scene_textures_descriptor_table,
-                  uint32_t internal_descriptor_table,
-                  uint32_t output_descriptor_table);
+                  uint32_t        scene_data_descriptor_table,
+                  uint32_t        scene_textures_descriptor_table,
+                  uint32_t        internal_descriptor_table,
+                  uint32_t        output_descriptor_table);
 
-    void IntegrateTemporally(ID3D12Resource* camera,
-                             ID3D12Resource* prev_camera,
-                             uint32_t internal_descriptor_table,
-                             uint32_t output_descriptor_table,
-                             uint32_t history_descriptor_table,
+    void IntegrateTemporally(ID3D12Resource*          camera,
+                             ID3D12Resource*          prev_camera,
+                             uint32_t                 internal_descriptor_table,
+                             uint32_t                 output_descriptor_table,
+                             uint32_t                 history_descriptor_table,
                              const SettingsComponent& settings);
 
-    void ApplyTAA(ID3D12Resource* camera,
-                  ID3D12Resource* prev_camera,
-                  uint32_t internal_descriptor_table,
-                  uint32_t output_descriptor_table,
-                  uint32_t history_descriptor_table,
+    void ApplyTAA(ID3D12Resource*          camera,
+                  ID3D12Resource*          prev_camera,
+                  uint32_t                 internal_descriptor_table,
+                  uint32_t                 output_descriptor_table,
+                  uint32_t                 history_descriptor_table,
                   const SettingsComponent& settings);
 
     void CombineIllumination(uint32_t output_descriptor_table, const SettingsComponent& settings);
@@ -82,27 +82,27 @@ private:
     uint32_t PopulateTAAInputDescritorTable();
     uint32_t PopulateSpatialGatherDescriptorTable();
 
-    ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> upload_command_list_       = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> raytracing_command_list_   = nullptr;
     ComPtr<ID3D12GraphicsCommandList> copy_gbuffer_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> indirect_ta_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> taa_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> eaw_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> ci_command_list_ = nullptr;
-    ComPtr<ID3D12GraphicsCommandList> sg_command_list_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> indirect_ta_command_list_  = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> taa_command_list_          = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> eaw_command_list_          = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> ci_command_list_           = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> sg_command_list_           = nullptr;
 
-    ComPtr<ID3D12Resource> output_direct_ = nullptr;
+    ComPtr<ID3D12Resource> output_direct_   = nullptr;
     ComPtr<ID3D12Resource> output_indirect_ = nullptr;
-    ComPtr<ID3D12Resource> output_temp_[2] = {nullptr};
-    ComPtr<ID3D12Resource> indirect_temp_ = nullptr;
+    ComPtr<ID3D12Resource> output_temp_[2]  = {nullptr};
+    ComPtr<ID3D12Resource> indirect_temp_   = nullptr;
 
     // Shader tables.
-    ComPtr<ID3D12Resource> raygen_shader_table = nullptr;
+    ComPtr<ID3D12Resource> raygen_shader_table   = nullptr;
     ComPtr<ID3D12Resource> hitgroup_shader_table = nullptr;
-    ComPtr<ID3D12Resource> miss_shader_table = nullptr;
+    ComPtr<ID3D12Resource> miss_shader_table     = nullptr;
 
     ComPtr<ID3D12RootSignature> raytracing_root_signature_ = nullptr;
-    ComPtr<ID3D12StateObject> raytracing_pipeline_state_ = nullptr;
+    ComPtr<ID3D12StateObject>   raytracing_pipeline_state_ = nullptr;
 
     // Temporal accumulation for irradiance buffer.
     ComPtr<ID3D12RootSignature> ta_root_signature_ = nullptr;
@@ -125,10 +125,10 @@ private:
     // Temporal history is ping-ponged.
     ComPtr<ID3D12Resource> indirect_history_[2] = {nullptr};
     ComPtr<ID3D12Resource> combined_history_[2] = {nullptr};
-    ComPtr<ID3D12Resource> moments_history_[2] = {nullptr};
+    ComPtr<ID3D12Resource> moments_history_[2]  = {nullptr};
     // GBuffer data is used for TAA and ping-ponged as well.
-    ComPtr<ID3D12Resource> gbuffer_normal_depth_ = nullptr;
-    ComPtr<ID3D12Resource> gbuffer_albedo_ = nullptr;
+    ComPtr<ID3D12Resource> gbuffer_normal_depth_      = nullptr;
+    ComPtr<ID3D12Resource> gbuffer_albedo_            = nullptr;
     ComPtr<ID3D12Resource> prev_gbuffer_normal_depth_ = nullptr;
 };
 }  // namespace capsaicin

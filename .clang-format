@@ -1,5 +1,5 @@
 BasedOnStyle: Google
-ColumnLimit: 120
+ColumnLimit: 100
 IndentWidth: 4
 AlignAfterOpenBracket: Align
 BreakBeforeBraces: Allman 
@@ -9,9 +9,10 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 AlignTrailingComments: true
 AllowShortBlocksOnASingleLine: false
-AlignConsecutiveDeclarations: false
-AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: true
+AlignConsecutiveAssignments: true
 AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
 BinPackArguments: false
 BinPackParameters: false
 AccessModifierOffset: -4

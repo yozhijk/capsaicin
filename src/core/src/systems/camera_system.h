@@ -4,7 +4,6 @@
 #include "src/dx12/common.h"
 #include "src/dx12/d3dx12.h"
 #include "src/dx12/dx12.h"
-
 #include "src/systems/render_system.h"
 
 using namespace capsaicin::dx12;
@@ -12,19 +11,19 @@ using namespace capsaicin::dx12;
 namespace capsaicin
 {
 // Camera data.
-struct  CameraData
+struct CameraData
 {
     XMFLOAT3 position;
-    float focal_length;
+    float    focal_length;
 
     XMFLOAT3 right;
-    float znear;
+    float    znear;
 
     XMFLOAT3 forward;
-    float focus_distance;
+    float    focus_distance;
 
     XMFLOAT3 up;
-    float aperture;
+    float    aperture;
 
     XMFLOAT2 sensor_size;
 };
@@ -32,8 +31,8 @@ struct  CameraData
 // Camera component.
 struct CameraComponent
 {
-    CameraData camera_data;
-    ComPtr<ID3D12Resource> camera_buffer = nullptr;
+    CameraData             camera_data;
+    ComPtr<ID3D12Resource> camera_buffer      = nullptr;
     ComPtr<ID3D12Resource> prev_camera_buffer = nullptr;
 };
 
@@ -44,7 +43,7 @@ public:
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
 private:
-    ComPtr<ID3D12GraphicsCommandList> upload_command_list_ = nullptr;
-    ComPtr<ID3D12Resource> camera_staging_buffer_ = nullptr;
+    ComPtr<ID3D12GraphicsCommandList> upload_command_list_   = nullptr;
+    ComPtr<ID3D12Resource>            camera_staging_buffer_ = nullptr;
 };
 }  // namespace capsaicin

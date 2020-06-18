@@ -24,21 +24,26 @@ struct IndexLess
                    ? lhs.vertex_index < rhs.vertex_index
                    : lhs.normal_index != rhs.normal_index
                          ? lhs.normal_index < rhs.normal_index
-                         : lhs.texcoord_index != rhs.texcoord_index ? lhs.texcoord_index < rhs.texcoord_index : false;
+                         : lhs.texcoord_index != rhs.texcoord_index
+                               ? lhs.texcoord_index < rhs.texcoord_index
+                               : false;
     }
 };
 
 // Load obj file into a single mesh.
-void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool force_single_mesh = false)
+void LoadObjFile(AssetComponent&        asset,
+                 std::vector<MeshData>& meshes,
+                 bool                   force_single_mesh = false)
 {
-    attrib_t attrib;
-    vector<shape_t> shapes;
+    attrib_t           attrib;
+    vector<shape_t>    shapes;
     vector<material_t> objmaterials;
 
     string warn;
     string err;
 
-    bool ret = LoadObj(&attrib, &shapes, &objmaterials, &warn, &err, asset.file_name.c_str(), "../../../assets/");
+    bool ret = LoadObj(
+        &attrib, &shapes, &objmaterials, &warn, &err, asset.file_name.c_str(), "../../../assets/");
 
     if (!err.empty())
     {
@@ -52,7 +57,7 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
         throw std::runtime_error("Couldn't load {}" + asset.file_name);
     }
 
-    MeshData mesh_data;
+    MeshData                                   mesh_data;
     map<tinyobj::index_t, uint32_t, IndexLess> index_cache;
 
     std::vector<uint32_t> texture_indices;
@@ -63,9 +68,10 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
         {
             if (!objmaterials[j].diffuse_texname.empty())
             {
-                std::string path = "";
+                std::string path      = "";
                 std::string full_name = path + objmaterials[j].diffuse_texname;
-                texture_indices.push_back(world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
+                texture_indices.push_back(
+                    world().GetSystem<TextureSystem>().GetTextureIndex(full_name));
             }
             else
             {
@@ -85,7 +91,7 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
         for (uint32_t i = 0u; i < shapes[shape_index].mesh.indices.size(); ++i)
         {
             auto index = shapes[shape_index].mesh.indices[i];
-            auto iter = index_cache.find(index);
+            auto iter  = index_cache.find(index);
             if (iter != index_cache.cend())
             {
                 mesh_data.indices.push_back(iter->second);
@@ -129,7 +135,8 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
         if (!force_single_mesh)
         {
             mesh_data.texture_index =
-                (shapes[shape_index].mesh.material_ids.empty() || shapes[shape_index].mesh.material_ids[0] == -1)
+                (shapes[shape_index].mesh.material_ids.empty() ||
+                 shapes[shape_index].mesh.material_ids[0] == -1)
                     ? ~0u
                     : texture_indices[shapes[shape_index].mesh.material_ids[0]];
 
@@ -143,34 +150,34 @@ void LoadObjFile(AssetComponent& asset, std::vector<MeshData>& meshes, bool forc
     }
 }
 
-void CreateGeometryStorage(std::vector<MeshData>& mesh_data_array,
-                           GeometryStorage& storage,
+void CreateGeometryStorage(std::vector<MeshData>&     mesh_data_array,
+                           GeometryStorage&           storage,
                            ID3D12GraphicsCommandList* command_list,
-                           RenderSystem& render_system)
+                           RenderSystem&              render_system)
 {
     std::vector<MeshComponent> meshes;
 
     for (auto& mesh_data : mesh_data_array)
     {
-        auto entity = world().CreateEntity().AddComponent<MeshComponent>().Build();
+        auto  entity         = world().CreateEntity().AddComponent<MeshComponent>().Build();
         auto& mesh_component = world().GetComponent<MeshComponent>(entity);
         // auto& mesh_component = world().AddComponent<MeshComponent>(mesh_data.entity);
         mesh_component.first_vertex_offset = storage.vertex_count;
-        mesh_component.first_index_offset = storage.index_count;
-        mesh_component.vertex_count = mesh_data.positions.size() / 3;
-        mesh_component.index_count = mesh_data.indices.size();
-        mesh_component.index = meshes.size();
-        mesh_component.material_index = mesh_data.texture_index;
+        mesh_component.first_index_offset  = storage.index_count;
+        mesh_component.vertex_count        = mesh_data.positions.size() / 3;
+        mesh_component.index_count         = mesh_data.indices.size();
+        mesh_component.index               = meshes.size();
+        mesh_component.material_index      = mesh_data.texture_index;
 
         // Create upload buffers.
-        auto vertex_upload_buffer =
-            dx12api().CreateUploadBuffer(mesh_data.positions.size() * sizeof(float), mesh_data.positions.data());
-        auto index_upload_buffer =
-            dx12api().CreateUploadBuffer(mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
-        auto normals_upload_buffer =
-            dx12api().CreateUploadBuffer(mesh_data.normals.size() * sizeof(float), mesh_data.normals.data());
-        auto texcoord_upload_buffer =
-            dx12api().CreateUploadBuffer(mesh_data.texcoords.size() * sizeof(float), mesh_data.texcoords.data());
+        auto vertex_upload_buffer = dx12api().CreateUploadBuffer(
+            mesh_data.positions.size() * sizeof(float), mesh_data.positions.data());
+        auto index_upload_buffer = dx12api().CreateUploadBuffer(
+            mesh_data.indices.size() * sizeof(uint32_t), mesh_data.indices.data());
+        auto normals_upload_buffer = dx12api().CreateUploadBuffer(
+            mesh_data.normals.size() * sizeof(float), mesh_data.normals.data());
+        auto texcoord_upload_buffer = dx12api().CreateUploadBuffer(
+            mesh_data.texcoords.size() * sizeof(float), mesh_data.texcoords.data());
 
         render_system.AddAutoreleaseResource(vertex_upload_buffer);
         render_system.AddAutoreleaseResource(index_upload_buffer);
@@ -206,24 +213,33 @@ void CreateGeometryStorage(std::vector<MeshData>& mesh_data_array,
     }
 
     // Upload mesh buffer.
-    auto mesh_upload_buffer = dx12api().CreateUploadBuffer(storage.mesh_count * sizeof(MeshComponent), meshes.data());
+    auto mesh_upload_buffer =
+        dx12api().CreateUploadBuffer(storage.mesh_count * sizeof(MeshComponent), meshes.data());
     render_system.AddAutoreleaseResource(mesh_upload_buffer);
 
-    command_list->CopyBufferRegion(
-        storage.mesh_descs.Get(), 0, mesh_upload_buffer.Get(), 0, storage.mesh_count * sizeof(MeshComponent));
+    command_list->CopyBufferRegion(storage.mesh_descs.Get(),
+                                   0,
+                                   mesh_upload_buffer.Get(),
+                                   0,
+                                   storage.mesh_count * sizeof(MeshComponent));
 
     // Transitions for mesh buffes to non pixel shader resource.
     D3D12_RESOURCE_BARRIER copy_dest_to_uav[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            storage.vertices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            storage.indices.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            storage.normals.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            storage.mesh_descs.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            storage.texcoords.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
+        CD3DX12_RESOURCE_BARRIER::Transition(storage.vertices.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(storage.indices.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(storage.normals.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(storage.mesh_descs.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(storage.texcoords.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
 
     // Transition to UAV.
     command_list->ResourceBarrier(ARRAYSIZE(copy_dest_to_uav), copy_dest_to_uav);
@@ -232,12 +248,16 @@ void CreateGeometryStorage(std::vector<MeshData>& mesh_data_array,
 
 AssetLoadSystem::AssetLoadSystem()
 {
-    storage_.vertices = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3), D3D12_RESOURCE_STATE_COPY_DEST);
-    storage_.indices = dx12api().CreateUAVBuffer(kIndexPoolSize * sizeof(uint32_t), D3D12_RESOURCE_STATE_COPY_DEST);
-    storage_.normals = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3), D3D12_RESOURCE_STATE_COPY_DEST);
-    storage_.texcoords = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT2), D3D12_RESOURCE_STATE_COPY_DEST);
-    storage_.mesh_descs =
-        dx12api().CreateUAVBuffer(kMeshPoolSize * sizeof(MeshComponent), D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.vertices   = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3),
+                                                  D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.indices    = dx12api().CreateUAVBuffer(kIndexPoolSize * sizeof(uint32_t),
+                                                 D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.normals    = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT3),
+                                                 D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.texcoords  = dx12api().CreateUAVBuffer(kVertexPoolSize * sizeof(XMFLOAT2),
+                                                   D3D12_RESOURCE_STATE_COPY_DEST);
+    storage_.mesh_descs = dx12api().CreateUAVBuffer(kMeshPoolSize * sizeof(MeshComponent),
+                                                    D3D12_RESOURCE_STATE_COPY_DEST);
 }
 
 void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
@@ -247,14 +267,16 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
     // Create command list if needed.
     if (!upload_command_list_)
     {
-        upload_command_list_ = dx12api().CreateCommandList(render_system.current_frame_command_allocator());
+        upload_command_list_ =
+            dx12api().CreateCommandList(render_system.current_frame_command_allocator());
         upload_command_list_->Close();
     }
 
     auto& assets = access.Write<AssetComponent>();
 
     // Find entities with AssetComponents which have not been loaded yet.
-    auto entities = entity_query().Filter([&assets](Entity e) { return assets.HasComponent(e); }).entities();
+    auto entities =
+        entity_query().Filter([&assets](Entity e) { return assets.HasComponent(e); }).entities();
 
     if (!entities.empty())
     {
@@ -285,7 +307,10 @@ void AssetLoadSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf
         }
 
         uint32_t num_triangles = 0u;
-        for (auto& m : meshes) { num_triangles += m.indices.size() / 3; }
+        for (auto& m : meshes)
+        {
+            num_triangles += m.indices.size() / 3;
+        }
 
         info("AssetLoadSystem: Total triangle count {}", num_triangles);
         info("AssetLoadSystem: Total instance count {}", meshes.size());

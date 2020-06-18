@@ -256,7 +256,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
                 in uint2 lidx: SV_GroupThreadID,
                 in uint2 bidx: SV_GroupID)
 {
-    const uint kMaxHistoryLength = 32.f;
+    const uint kMaxHistoryLength = 256.f;
 
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;

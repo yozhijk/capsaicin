@@ -1,9 +1,9 @@
 #include "composite_system.h"
 
 #include "src/common.h"
-#include "src/systems/render_system.h"
 #include "src/systems/raytracing_system.h"
 #include "src/systems/voxel_visualizer_system.h"
+#include "src/systems/render_system.h"
 
 namespace capsaicin
 {
@@ -24,7 +24,7 @@ struct Constants
 {
     uint32_t width;
     uint32_t height;
-    float rotation;
+    float    rotation;
     uint32_t padding;
 };
 }  // namespace
@@ -66,41 +66,43 @@ void CompositeSystem::InitPipeline()
     root_signature_ = dx12api().CreateRootSignature(desc);
 
     ShaderCompiler& shader_compiler{ShaderCompiler::instance()};
-    auto vertex_shader = shader_compiler.CompileFromFile("../../../src/core/shaders/simple.hlsl", "vs_6_0", "VsMain");
-    auto pixel_shader = shader_compiler.CompileFromFile("../../../src/core/shaders/simple.hlsl", "ps_6_0", "PsMain");
+    auto            vertex_shader = shader_compiler.CompileFromFile(
+        "../../../src/core/shaders/simple.hlsl", "vs_6_0", "VsMain");
+    auto pixel_shader = shader_compiler.CompileFromFile(
+        "../../../src/core/shaders/simple.hlsl", "ps_6_0", "PsMain");
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-    pso_desc.InputLayout = {nullptr, 0};
-    pso_desc.pRootSignature = root_signature_.Get();
-    pso_desc.VS = vertex_shader;
-    pso_desc.PS = pixel_shader;
-    pso_desc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-    pso_desc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    pso_desc.DepthStencilState.DepthEnable = FALSE;
-    pso_desc.DepthStencilState.StencilEnable = FALSE;
-    pso_desc.SampleMask = UINT_MAX;
-    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    pso_desc.NumRenderTargets = 1;
-    pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    pso_desc.SampleDesc.Count = 1;
+    pso_desc.InputLayout                        = {nullptr, 0};
+    pso_desc.pRootSignature                     = root_signature_.Get();
+    pso_desc.VS                                 = vertex_shader;
+    pso_desc.PS                                 = pixel_shader;
+    pso_desc.RasterizerState                    = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    pso_desc.RasterizerState.CullMode           = D3D12_CULL_MODE_BACK;
+    pso_desc.BlendState                         = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    pso_desc.DepthStencilState.DepthEnable      = FALSE;
+    pso_desc.DepthStencilState.StencilEnable    = FALSE;
+    pso_desc.SampleMask                         = UINT_MAX;
+    pso_desc.PrimitiveTopologyType              = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pso_desc.NumRenderTargets                   = 1;
+    pso_desc.RTVFormats[0]                      = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pso_desc.SampleDesc.Count                   = 1;
 
     pipeline_state_ = dx12api().CreatePipelineState(pso_desc);
 }
 
 uint32_t CompositeSystem::PopulateDescriptorTable()
 {
-    auto& render_system = world().GetSystem<RenderSystem>();
+    auto& render_system     = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
     auto& voxel_vis_system = world().GetSystem<VoxelVisualizerSystem>();
     auto base_index = render_system.AllocateDescriptorRange(1);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc;
-    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srv_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-    srv_desc.Texture2D.MipLevels = 1;
-    srv_desc.Texture2D.MostDetailedMip = 0;
-    srv_desc.Texture2D.PlaneSlice = 0;
+    srv_desc.ViewDimension                 = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Format                        = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    srv_desc.Texture2D.MipLevels           = 1;
+    srv_desc.Texture2D.MostDetailedMip     = 0;
+    srv_desc.Texture2D.PlaneSlice          = 0;
     srv_desc.Texture2D.ResourceMinLODClamp = 0;
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     dx12api().device()->CreateShaderResourceView(
@@ -110,11 +112,11 @@ uint32_t CompositeSystem::PopulateDescriptorTable()
 
 void CompositeSystem::Render(float time, uint32_t output_srv_index)
 {
-    auto& render_system = world().GetSystem<RenderSystem>();
+    auto& render_system     = world().GetSystem<RenderSystem>();
     auto& raytracing_system = world().GetSystem<RaytracingSystem>();
     auto& voxel_vis_system = world().GetSystem <VoxelVisualizerSystem>();
 
-    auto window_width = render_system.window_width();
+    auto window_width  = render_system.window_width();
     auto window_height = render_system.window_height();
 
     Constants constants{window_width, window_height, time, 0};
@@ -132,9 +134,8 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
     {
         D3D12_RESOURCE_BARRIER transitions[2] = {
             // Backbuffer transition to render target.
-            CD3DX12_RESOURCE_BARRIER::Transition(backbuffer,
-                                                 D3D12_RESOURCE_STATE_PRESENT,
-                                                 D3D12_RESOURCE_STATE_RENDER_TARGET),
+            CD3DX12_RESOURCE_BARRIER::Transition(
+                backbuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
             // Raytraced image transition UAV to SRV.
             CD3DX12_RESOURCE_BARRIER::Transition(raytracing_output,
                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
@@ -149,13 +150,16 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
 
     command_list_->SetGraphicsRootSignature(root_signature_.Get());
     command_list_->SetDescriptorHeaps(ARRAYSIZE(descriptor_heaps), descriptor_heaps);
-    command_list_->SetGraphicsRoot32BitConstants(RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
+    command_list_->SetGraphicsRoot32BitConstants(
+        RootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
     command_list_->SetPipelineState(pipeline_state_.Get());
     command_list_->SetGraphicsRootDescriptorTable(RootSignature::kRaytracerOutput,
                                                   render_system.GetDescriptorHandleGPU(output_srv_index));
 
-    D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(window_width), static_cast<float>(window_height)};
-    D3D12_RECT scissor_rect{0, 0, static_cast<LONG>(window_width), static_cast<LONG>(window_height)};
+    D3D12_VIEWPORT viewport{
+        0.0f, 0.0f, static_cast<float>(window_width), static_cast<float>(window_height)};
+    D3D12_RECT scissor_rect{
+        0, 0, static_cast<LONG>(window_width), static_cast<LONG>(window_height)};
     command_list_->RSSetViewports(1, &viewport);
     command_list_->RSSetScissorRects(1, &scissor_rect);
     command_list_->OMSetRenderTargets(1, &rtv_handle, FALSE, nullptr);
@@ -170,9 +174,8 @@ void CompositeSystem::Render(float time, uint32_t output_srv_index)
     {
         D3D12_RESOURCE_BARRIER transitions[2] = {
             // Backbuffer transition to render target.
-            CD3DX12_RESOURCE_BARRIER::Transition(backbuffer,
-                                                 D3D12_RESOURCE_STATE_RENDER_TARGET,
-                                                 D3D12_RESOURCE_STATE_PRESENT),
+            CD3DX12_RESOURCE_BARRIER::Transition(
+                backbuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT),
             // Raytraced image transition UAV to SRV.
             CD3DX12_RESOURCE_BARRIER::Transition(raytracing_output,
                                                  D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,

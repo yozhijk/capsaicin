@@ -18,7 +18,7 @@ public:
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
 
 private:
-    void InitPipeline();
+    void     InitPipeline();
     uint32_t PopulateDescriptorTable();
 
     void Render(float time, uint32_t output_srv_index);

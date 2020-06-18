@@ -19,14 +19,14 @@ public:
 
     ComPtr<ID3D12Resource> GetTexture(const std::string& name);
     ComPtr<ID3D12Resource> GetTexture(uint32_t index);
-    uint32_t GetTextureIndex(const std::string& name);
+    uint32_t               GetTextureIndex(const std::string& name);
 
-    size_t num_textures() const { return textures_.size(); }
+    size_t          num_textures() const { return textures_.size(); }
     ID3D12Resource* texture(uint32_t index) { return textures_[index].Get(); }
 
 private:
-    uint32_t LoadTexture(const std::string& name);
-    std::vector<ComPtr<ID3D12Resource>> textures_;
+    uint32_t                                  LoadTexture(const std::string& name);
+    std::vector<ComPtr<ID3D12Resource>>       textures_;
     std::unordered_map<std::string, uint32_t> cache_;
 };
 }  // namespace capsaicin

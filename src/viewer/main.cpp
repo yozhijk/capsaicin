@@ -49,16 +49,16 @@ LRESULT __stdcall WndProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 
 int main()
 {
-    constexpr const char* kWindowClassName = "Viewer";
-    constexpr std::uint32_t kWindowWidth = 1920;
-    constexpr std::uint32_t kWindowHeight = 1080;
+    constexpr const char*   kWindowClassName = "Viewer";
+    constexpr std::uint32_t kWindowWidth     = 800;
+    constexpr std::uint32_t kWindowHeight    = 600;
 
     WNDCLASSEX window_class{};
-    window_class.cbSize = sizeof(WNDCLASSEX);
-    window_class.style = CS_HREDRAW | CS_VREDRAW;
-    window_class.lpfnWndProc = WndProc;
-    window_class.hInstance = GetModuleHandle(0);
-    window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+    window_class.cbSize        = sizeof(WNDCLASSEX);
+    window_class.style         = CS_HREDRAW | CS_VREDRAW;
+    window_class.lpfnWndProc   = WndProc;
+    window_class.hInstance     = GetModuleHandle(0);
+    window_class.hCursor       = LoadCursor(NULL, IDC_ARROW);
     window_class.lpszClassName = kWindowClassName;
 
     if (RegisterClassEx(&window_class))
@@ -86,7 +86,7 @@ int main()
             RenderSessionParams params{hwnd};
             InitRenderSession(&params);
             LoadSceneFromOBJ("../../../assets/sponza.obj");
-            //LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");
+            // LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
 

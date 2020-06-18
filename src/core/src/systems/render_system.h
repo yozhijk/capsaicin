@@ -28,6 +28,10 @@ public:
     D3D12_CPU_DESCRIPTOR_HANDLE GetDescriptorHandleCPU(uint32_t index);
     D3D12_GPU_DESCRIPTOR_HANDLE GetDescriptorHandleGPU(uint32_t index);
 
+    // Allocate a pair of timestamp query indices (one for the start, one for the end)
+    std::pair<uint32_t, uint32_t> AllocateTimestampQueryPair(const std::string& name);
+    const std::vector<std::pair<std::string, float>>& gpu_timings() const;
+
     // Properties.
     static constexpr uint32_t num_gpu_frames_in_flight() { return kNumGPUFramesInFlight; }
     static constexpr uint32_t constant_buffer_alignment() { return kConstantBufferAlignment; }
@@ -37,16 +41,17 @@ public:
     uint32_t current_gpu_frame_index() const { return current_gpu_frame_index_; }
     uint32_t frame_count() const { return frame_count_; }
 
-    ID3D12CommandAllocator* current_frame_command_allocator();
-    ID3D12DescriptorHeap* current_frame_descriptor_heap();
-    ID3D12Resource* current_frame_output();
+    ID3D12CommandAllocator*     current_frame_command_allocator();
+    ID3D12DescriptorHeap*       current_frame_descriptor_heap();
+    ID3D12Resource*             current_frame_output();
     D3D12_CPU_DESCRIPTOR_HANDLE current_frame_output_descriptor_handle();
+    ID3D12QueryHeap*            current_frame_timestamp_query_heap();
 
     HWND hwnd() { return hwnd_; }
 
 private:
-    static constexpr uint32_t kNumGPUFramesInFlight = 2;
-    static constexpr uint32_t kConstantBufferAlignment = 256;
+    static constexpr uint32_t kNumGPUFramesInFlight      = 2;
+    static constexpr uint32_t kConstantBufferAlignment   = 256;
     static constexpr uint32_t kMaxCommandBuffersPerFrame = 4096;
     static constexpr uint32_t kMaxUAVDescriptorsPerFrame = 4096;
 
@@ -58,14 +63,30 @@ private:
     // (index is from 0 to num_gpu_frames_in_flight()-1).
     void ExecuteCommandLists(uint32_t index);
 
+    // Resolve query data.
+    void ResolveQueryData();
+    // Read timestamp values from GPU.
+    void ReadbackTimestamps(uint32_t frame_index);
+
+    struct GPUFrameData;
+    GPUFrameData& current_gpu_frame_data();
+
     // Per-frame GPU data.
     struct GPUFrameData
     {
-        ComPtr<ID3D12CommandAllocator> command_allocator = nullptr;
-        ComPtr<ID3D12DescriptorHeap> descriptor_heap = nullptr;
+        ComPtr<ID3D12CommandAllocator> command_allocator    = nullptr;
+        ComPtr<ID3D12DescriptorHeap>   descriptor_heap      = nullptr;
+        ComPtr<ID3D12QueryHeap>        timestamp_query_heap = nullptr;
+        ComPtr<ID3D12Resource>         timestamp_buffer     = nullptr;
+
         std::array<ComPtr<ID3D12CommandList>, kMaxCommandBuffersPerFrame> command_lists = {nullptr};
-        std::atomic_uint32_t num_command_lists = 0;
-        std::atomic_uint32_t num_descriptors = 0;
+
+        std::atomic_uint32_t num_command_lists         = 0;
+        std::atomic_uint32_t num_descriptors           = 0;
+        std::atomic_uint32_t num_timestamp_query_pairs = 0;
+
+        std::array<std::string, kMaxCommandBuffersPerFrame> query_names = {};
+
         uint64_t submission_id = 0;
 
         std::vector<ComPtr<ID3D12Resource>> autorelease_pool;
@@ -75,7 +96,7 @@ private:
 
     HWND hwnd_;
     // Current backbuffer index.
-    UINT current_gpu_frame_index_ = 0;
+    uint32_t current_gpu_frame_index_ = 0;
     // Swapchain.
     ComPtr<IDXGISwapChain3> swapchain_ = nullptr;
     // TODO: this is debug fence, change to ringbuffer later.
@@ -83,17 +104,22 @@ private:
     // Render target descriptor heap for the swapchain.
     ComPtr<ID3D12DescriptorHeap> rtv_descriptor_heap_ = nullptr;
 
+    // Command list to resolve query heap.
+    ComPtr<ID3D12GraphicsCommandList> query_resolve_command_list_ = nullptr;
+    // Last timestamp query data.
+    std::vector<std::pair<std::string, float>> gpu_timings_;
+
     // Render target chain.
     std::array<ComPtr<ID3D12Resource>, kNumGPUFramesInFlight> backbuffers_ = {nullptr};
+
     // Window event.
-    HANDLE win32_event_ = INVALID_HANDLE_VALUE;
-    uint32_t window_width_ = 0;
-    uint32_t window_height_ = 0;
-    uint32_t next_submission_id_ = 1;
+    HANDLE   win32_event_              = INVALID_HANDLE_VALUE;
+    uint32_t window_width_             = 0;
+    uint32_t window_height_            = 0;
+    uint32_t next_submission_id_       = 1;
     uint32_t uav_descriptor_increment_ = 0;
     uint32_t rtv_descriptor_increment_ = 0;
-
-    uint32_t frame_count_ = 0;
+    uint32_t frame_count_              = 0;
 };
 
 template <typename R>

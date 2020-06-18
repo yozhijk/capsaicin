@@ -53,14 +53,15 @@ Shader ShaderCompiler::CompileFromFile(const std::string& file_name,
     return CompileFromFile(file_name, shader_model, entry_point, defs);
 }
 
-Shader ShaderCompiler::CompileFromFile(const std::string& file_name,
-                                       const std::string& shader_model,
-                                       const std::string& entry_point,
+Shader ShaderCompiler::CompileFromFile(const std::string&              file_name,
+                                       const std::string&              shader_model,
+                                       const std::string&              entry_point,
                                        const std::vector<std::string>& defines)
 {
     ComPtr<IDxcBlobEncoding> source = nullptr;
 
-    auto result = library_->CreateBlobFromFile(StringToWideString(file_name).c_str(), nullptr, &source);
+    auto result =
+        library_->CreateBlobFromFile(StringToWideString(file_name).c_str(), nullptr, &source);
 
     if (FAILED(result))
     {
@@ -75,8 +76,8 @@ Shader ShaderCompiler::CompileFromFile(const std::string& file_name,
     {
         wdefines.push_back(StringToWideString(d));
         DxcDefine dxcdef = {};
-        dxcdef.Name = wdefines.back().c_str();
-        dxcdef.Value = L"1";
+        dxcdef.Name      = wdefines.back().c_str();
+        dxcdef.Value     = L"1";
         temp.push_back(dxcdef);
     }
 
@@ -120,15 +121,15 @@ Shader ShaderCompiler::CompileFromString(const std::string& source_string,
     return CompileFromString(source_string, shader_model, entry_point, defs);
 }
 
-Shader ShaderCompiler::CompileFromString(const std::string& source_string,
-                                         const std::string& shader_model,
-                                         const std::string& entry_point,
+Shader ShaderCompiler::CompileFromString(const std::string&              source_string,
+                                         const std::string&              shader_model,
+                                         const std::string&              entry_point,
                                          const std::vector<std::string>& defines)
 {
     ComPtr<IDxcBlobEncoding> source = nullptr;
 
-    auto result =
-        library_->CreateBlobWithEncodingFromPinned(source_string.c_str(), (UINT)source_string.size(), 0, &source);
+    auto result = library_->CreateBlobWithEncodingFromPinned(
+        source_string.c_str(), (UINT)source_string.size(), 0, &source);
 
     if (FAILED(result))
     {
@@ -143,8 +144,8 @@ Shader ShaderCompiler::CompileFromString(const std::string& source_string,
     {
         wdefines.push_back(StringToWideString(d));
         DxcDefine dxcdef = {};
-        dxcdef.Name = wdefines.back().c_str();
-        dxcdef.Value = L"1";
+        dxcdef.Name      = wdefines.back().c_str();
+        dxcdef.Value     = L"1";
         temp.push_back(dxcdef);
     }
 
