@@ -183,8 +183,6 @@ RaytracingSystem::~RaytracingSystem() = default;
 
 void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
-    return;
-
     auto& settings = access.Write<SettingsComponent>()[0];
 
     auto tlas   = GetSceneTLASComponent(access, entity_query);
@@ -400,8 +398,8 @@ void RaytracingSystem::InitPipeline()
                                          D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // Half resolution indirect.
-            texture_desc.Width >>= 1;
-            texture_desc.Height >>= 1;
+            // texture_desc.Width >>= 1;
+            // texture_desc.Height >>= 1;
             output_indirect_ =
                 dx12api().CreateResource(texture_desc,
                                          CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -983,8 +981,8 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
 void RaytracingSystem::SpatialGather(uint32_t descriptor_table, const SettingsComponent& settings)
 {
     auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  width                = render_system.window_width() >> 1;
-    auto  height               = render_system.window_height() >> 1;
+    auto  width                = render_system.window_width();
+    auto  height               = render_system.window_height();
     auto  command_allocator    = render_system.current_frame_command_allocator();
     auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
     auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();

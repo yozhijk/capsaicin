@@ -67,7 +67,8 @@ float3 CalculateDirectIllumination(float3 v, float3 n, float3 kd)
 
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
-    float2 s = 0.5f; //Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
+    // TODO: debug
+    float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);
@@ -97,8 +98,12 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     payload.recursion_depth = 0;
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE, ~0, 0, 0, 0, ray, payload);
 
-    uint2 output_xy = DispatchRaysIndex() >> 1;
-    g_output_color_indirect[output_xy] = float4(payload.color, 1.f);
+    //if (Interleave2x2(DispatchRaysIndex(), g_constants.frame_count))
+    //{
+        //uint2 output_xy = DispatchRaysIndex() >> 1;
+        uint2 output_xy = DispatchRaysIndex();
+        g_output_color_indirect[output_xy] = float4(payload.color, 1.f);
+    //}
 }
 
 [shader("anyhit")] void ShadowHit(inout ShadowRayPayload payload, in MyAttributes attr)
@@ -165,7 +170,8 @@ RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
     }
 
     // For all the bounces except the last one, cast extension ray.
-    if (payload.recursion_depth < 2 &&  Interleave2x2(xy, g_constants.frame_count))
+    //if (payload.recursion_depth < 2 &&  Interleave2x2(xy, g_constants.frame_count))
+    if (payload.recursion_depth < 2)
     {
         // Add indirect.
         float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);

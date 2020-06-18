@@ -55,11 +55,11 @@ void RenderSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::S
     // Get engine settings.
     auto& settings = access.Write<SettingsComponent>()[0];
 
+    // Enqueue internal command buffer to fetch queries.
+    ResolveQueryData();
+
     // Execute queued command lists.
     ExecuteCommandLists(current_gpu_frame_index());
-
-    // Execute internal command buffer to fetch queries.
-    ResolveQueryData();
 
     // Present
     auto sync_interval = settings.vsync ? 1 : 0;

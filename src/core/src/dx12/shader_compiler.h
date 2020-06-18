@@ -3,8 +3,9 @@
 #include <string>
 #include <vector>
 
-#include "dxcapi.h"
 #include "src/dx12/common.h"
+
+#include "dxcapi.h"
 
 namespace capsaicin::dx12
 {

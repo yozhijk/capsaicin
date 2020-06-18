@@ -39,7 +39,7 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     float3 filtered_color = 0.f;
     float total_weight = 0.f;
 
-    float4 center_g = g_gbuffer.Load(int3(gidx << 1, 0));
+    float4 center_g = g_gbuffer.Load(int3(gidx, 0));
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
     float3 center_color = g_color[gidx].xyz;
@@ -65,7 +65,7 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
             }
 
             float3 c = g_color[xy].xyz;
-            float4 g = g_gbuffer.Load(int3(xy << 1, 0));
+            float4 g = g_gbuffer.Load(int3(xy, 0));
             float3 n = OctDecode(g.xy);
             float  d = g.w;
 
