@@ -37,7 +37,7 @@ GUISystem::GUISystem(HWND hwnd)
 
     // Create command list.
     auto command_allocator = render_system.current_frame_command_allocator();
-    gui_command_list_ = dx12api().CreateCommandList(command_allocator);
+    gui_command_list_      = dx12api().CreateCommandList(command_allocator);
     gui_command_list_->Close();
 }
 
@@ -54,12 +54,14 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     ImGui::SetWindowSize(ImVec2(280.f, 290.f));
     ImGui::SetWindowPos(ImVec2(20.f, 20.f));
 
-    // ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings too)
+    // ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings
+    // too)
 
-    // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
+    // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);  // Edit 1 float using a slider from 0.0f
+    // to 1.0f
 
-    // if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when
-    // edited/activated)
+    // if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true
+    // when edited/activated)
     //    counter++;
     // ImGui::SameLine();
     // ImGui::Text("counter = %d", counter);
@@ -81,8 +83,17 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     ImGui::Combo("Output", &settings.output, outputs, ARRAYSIZE(outputs), 5);
     ImGui::Separator();
 
-    ImGui::Text(
-        "Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto& gpu_timings   = render_system.gpu_timings();
+
+    for (auto& p : gpu_timings)
+    {
+        ImGui::Text(std::string(p.first + ": %f").c_str(), p.second * 1000);
+    }
+
+    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+                1000.0f / ImGui::GetIO().Framerate,
+                ImGui::GetIO().Framerate);
     ImGui::End();
 }
 
@@ -91,8 +102,8 @@ void GUISystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subf
     // Get settings.
     auto& settings = access.Write<SettingsComponent>()[0];
 
-    auto& render_system = world().GetSystem<RenderSystem>();
-    auto command_allocator = render_system.current_frame_command_allocator();
+    auto& render_system     = world().GetSystem<RenderSystem>();
+    auto  command_allocator = render_system.current_frame_command_allocator();
 
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();

@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 
-#include "src/dx12/common.h"
 #include "dxcapi.h"
+#include "src/dx12/common.h"
 
 namespace capsaicin::dx12
 {
@@ -27,27 +27,27 @@ public:
                            const std::string& shader_model,
                            const std::string& entry_point);
 
-    Shader CompileFromFile(const std::string& file_name,
-                           const std::string& shader_model,
-                           const std::string& entry_point,
+    Shader CompileFromFile(const std::string&              file_name,
+                           const std::string&              shader_model,
+                           const std::string&              entry_point,
                            const std::vector<std::string>& defines);
 
     Shader CompileFromString(const std::string& source_string,
                              const std::string& shader_model,
                              const std::string& entry_point);
 
-    Shader CompileFromString(const std::string& source_string,
-                             const std::string& shader_model,
-                             const std::string& entry_point,
+    Shader CompileFromString(const std::string&              source_string,
+                             const std::string&              shader_model,
+                             const std::string&              entry_point,
                              const std::vector<std::string>& defines);
 
 private:
     ShaderCompiler();
     ~ShaderCompiler();
 
-    HMODULE hdll_;
-    IDxcCompiler2* compiler_ = nullptr;
-    IDxcLibrary* library_ = nullptr;
+    HMODULE             hdll_;
+    IDxcCompiler2*      compiler_        = nullptr;
+    IDxcLibrary*        library_         = nullptr;
     IDxcIncludeHandler* include_handler_ = nullptr;
 };
 }  // namespace capsaicin::dx12

@@ -12,15 +12,16 @@ namespace capsaicin
 {
 void InputSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
-    static auto time = std::chrono::high_resolution_clock::now();
-    static auto prev_time = std::chrono::high_resolution_clock::now();
-    static float rotation = 0.f;
+    static auto  time      = std::chrono::high_resolution_clock::now();
+    static auto  prev_time = std::chrono::high_resolution_clock::now();
+    static float rotation  = 0.f;
 
-    time = std::chrono::high_resolution_clock::now();
+    time          = std::chrono::high_resolution_clock::now();
     auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count();
 
     auto& cameras = access.Write<CameraComponent>();
-    auto entities = entity_query().Filter([&cameras](Entity e) { return cameras.HasComponent(e); }).entities();
+    auto  entities =
+        entity_query().Filter([&cameras](Entity e) { return cameras.HasComponent(e); }).entities();
 
     if (entities.size() != 1)
     {
@@ -39,7 +40,8 @@ void InputSystem::ProcessInput(void* input)
 
     Input* w32input = reinterpret_cast<Input*>(input);
 
-    ImGui_ImplWin32_WndProcHandler(render_system.hwnd(), w32input->message, w32input->wparam, w32input->lparam);
+    ImGui_ImplWin32_WndProcHandler(
+        render_system.hwnd(), w32input->message, w32input->wparam, w32input->lparam);
     Keyboard::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);
     Mouse::ProcessMessage(w32input->message, w32input->wparam, w32input->lparam);
 }
@@ -48,7 +50,7 @@ void InputSystem::HandleKeyboard(CameraData& camera_data, float dt)
 {
     auto keyboard_state = keyboard_.GetState();
 
-    XMFLOAT3 movement{0.f, 0.f, 0.f};
+    XMFLOAT3        movement{0.f, 0.f, 0.f};
     constexpr float kMovementSpeed = 0.0125f;
 
     if (keyboard_state.IsKeyDown(Keyboard::A))
@@ -124,15 +126,19 @@ void InputSystem::HandleMouse(CameraData& camera_data, float dt)
         mouse_x_ = mouse.x;
         mouse_y_ = mouse.y;
 
-        XMFLOAT3 up = XMFLOAT3(0.f, 1.f, 0.f);
+        XMFLOAT3 up      = XMFLOAT3(0.f, 1.f, 0.f);
         XMFLOAT3 forward = XMFLOAT3(0.f, 0.f, 1.f);
-        XMMATRIX rotation = XMMatrixRotationRollPitchYaw(pitch_ * (XM_PI / 180.f), yaw_ * (XM_PI / 180.f), 0.f);
+        XMMATRIX rotation =
+            XMMatrixRotationRollPitchYaw(pitch_ * (XM_PI / 180.f), yaw_ * (XM_PI / 180.f), 0.f);
 
-        XMStoreFloat3(&camera_data.forward, XMVector3Normalize(XMVector3Transform(XMLoadFloat3(&forward), rotation)));
+        XMStoreFloat3(&camera_data.forward,
+                      XMVector3Normalize(XMVector3Transform(XMLoadFloat3(&forward), rotation)));
         XMStoreFloat3(&camera_data.right,
-                      XMVector3Normalize(-XMVector3Cross(XMLoadFloat3(&camera_data.forward), XMLoadFloat3(&up))));
-        XMStoreFloat3(&camera_data.up,
-                      XMVector3Cross(XMLoadFloat3(&camera_data.forward), XMLoadFloat3(&camera_data.right)));
+                      XMVector3Normalize(
+                          -XMVector3Cross(XMLoadFloat3(&camera_data.forward), XMLoadFloat3(&up))));
+        XMStoreFloat3(
+            &camera_data.up,
+            XMVector3Cross(XMLoadFloat3(&camera_data.forward), XMLoadFloat3(&camera_data.right)));
 
         return;
     }

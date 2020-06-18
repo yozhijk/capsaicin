@@ -18,7 +18,10 @@ ComPtr<ID3D12Resource> TextureSystem::GetTexture(const std::string& name)
     return GetTexture(it->second);
 }
 
-ComPtr<ID3D12Resource> TextureSystem::GetTexture(uint32_t index) { return textures_[index]; }
+ComPtr<ID3D12Resource> TextureSystem::GetTexture(uint32_t index)
+{
+    return textures_[index];
+}
 
 uint32_t TextureSystem::GetTextureIndex(const std::string& name)
 {
@@ -35,33 +38,35 @@ uint32_t TextureSystem::GetTextureIndex(const std::string& name)
 uint32_t TextureSystem::LoadTexture(const std::string& name)
 {
     auto& render_system = world().GetSystem<RenderSystem>();
-    auto full_name = std::string("../../../assets/textures/") + name;
+    auto  full_name     = std::string("../../../assets/textures/") + name;
 
-    int res_x, res_y;
-    int channels;
+    int   res_x, res_y;
+    int   channels;
     auto* data = stbi_load(full_name.c_str(), &res_x, &res_y, &channels, 4);
 
-     uint32_t null_data = 0x00000000;
-    auto* data_ptr = data;
+    uint32_t null_data = 0x00000000;
+    auto*    data_ptr  = data;
 
     if (data_ptr == nullptr)
     {
         warn("TextureSystem: texture {} missing", full_name);
         data_ptr = (stbi_uc*)&null_data;
-        res_x = 1;
-        res_y = 1;
+        res_x    = 1;
+        res_y    = 1;
     };
 
     // Create texture in default heap.
-    CD3DX12_RESOURCE_DESC texture_desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UINT, res_x, res_y);
-    auto texture = dx12api().CreateResource(
-        texture_desc, CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_RESOURCE_STATE_COPY_DEST);
+    CD3DX12_RESOURCE_DESC texture_desc =
+        CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UINT, res_x, res_y);
+    auto texture = dx12api().CreateResource(texture_desc,
+                                            CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+                                            D3D12_RESOURCE_STATE_COPY_DEST);
 
     D3D12_SUBRESOURCE_FOOTPRINT pitched_desc = {};
-    pitched_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    pitched_desc.Width = res_x;
-    pitched_desc.Height = res_y;
-    pitched_desc.Depth = 1;
+    pitched_desc.Format                      = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pitched_desc.Width                       = res_x;
+    pitched_desc.Height                      = res_y;
+    pitched_desc.Depth                       = 1;
     pitched_desc.RowPitch = align(res_x * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
     auto upload_buffer = dx12api().CreateUploadBuffer(pitched_desc.Height * pitched_desc.RowPitch);
@@ -80,26 +85,27 @@ uint32_t TextureSystem::LoadTexture(const std::string& name)
     stbi_image_free(data);
 
     D3D12_TEXTURE_COPY_LOCATION src_texture_loc;
-    src_texture_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src_texture_loc.PlacedFootprint.Offset = 0;
+    src_texture_loc.Type                      = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src_texture_loc.PlacedFootprint.Offset    = 0;
     src_texture_loc.PlacedFootprint.Footprint = pitched_desc;
-    src_texture_loc.pResource = upload_buffer.Get();
+    src_texture_loc.pResource                 = upload_buffer.Get();
 
     D3D12_TEXTURE_COPY_LOCATION dst_texture_loc;
-    dst_texture_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dst_texture_loc.pResource = texture.Get();
+    dst_texture_loc.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst_texture_loc.pResource        = texture.Get();
     dst_texture_loc.SubresourceIndex = 0;
 
     D3D12_BOX copy_box{0, 0, 0, res_x, res_y, 1};
 
     auto command_allocator = render_system.current_frame_command_allocator();
-    auto command_list = dx12api().CreateCommandList(command_allocator);
+    auto command_list      = dx12api().CreateCommandList(command_allocator);
 
     command_list->CopyTextureRegion(&dst_texture_loc, 0, 0, 0, &src_texture_loc, &copy_box);
     D3D12_RESOURCE_BARRIER transitions[] = {
         // Backbuffer transition to render target.
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
+        CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(),
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)};
     command_list->ResourceBarrier(ARRAYSIZE(transitions), transitions);
     command_list->Close();
 

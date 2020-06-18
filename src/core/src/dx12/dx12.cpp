@@ -17,8 +17,8 @@ void Dx12::InitD3D12(D3D_FEATURE_LEVEL feature_level)
                   "Cannot create D3D12 device");
 
     D3D12_COMMAND_QUEUE_DESC queue_desc = {};
-    queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    queue_desc.Flags                    = D3D12_COMMAND_QUEUE_FLAG_NONE;
+    queue_desc.Type                     = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
     ThrowIfFailed(device_->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),
                   "Cannot create command queue");
@@ -28,8 +28,11 @@ ComPtr<ID3D12GraphicsCommandList> Dx12::CreateCommandList(ID3D12CommandAllocator
 {
     ComPtr<ID3D12GraphicsCommandList> command_list;
 
-    ThrowIfFailed(device()->CreateCommandList(
-                      0u, D3D12_COMMAND_LIST_TYPE_DIRECT, command_allocator, nullptr, IID_PPV_ARGS(&command_list)),
+    ThrowIfFailed(device()->CreateCommandList(0u,
+                                              D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                              command_allocator,
+                                              nullptr,
+                                              IID_PPV_ARGS(&command_list)),
                   "Cannot create command stream");
 
     return command_list;
@@ -38,7 +41,8 @@ ComPtr<ID3D12GraphicsCommandList> Dx12::CreateCommandList(ID3D12CommandAllocator
 ComPtr<ID3D12CommandAllocator> Dx12::CreateCommandAllocator()
 {
     ComPtr<ID3D12CommandAllocator> command_allocator;
-    ThrowIfFailed(device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&command_allocator)),
+    ThrowIfFailed(device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                   IID_PPV_ARGS(&command_allocator)),
                   "Cannot create command allocator");
 
     return command_allocator;
@@ -54,9 +58,9 @@ ComPtr<ID3D12Fence> Dx12::CreateFence(UINT64 initial_value)
 
 ComPtr<ID3D12Resource> Dx12::CreateUploadBuffer(UINT64 size, const void* data)
 {
-    ComPtr<ID3D12Resource> resource = nullptr;
-    auto heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    auto buffer_desc = CD3DX12_RESOURCE_DESC::Buffer(size);
+    ComPtr<ID3D12Resource> resource        = nullptr;
+    auto                   heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+    auto                   buffer_desc     = CD3DX12_RESOURCE_DESC::Buffer(size);
     ThrowIfFailed(device()->CreateCommittedResource(&heap_properties,
                                                     D3D12_HEAP_FLAG_NONE,
                                                     &buffer_desc,
@@ -76,53 +80,84 @@ ComPtr<ID3D12Resource> Dx12::CreateUploadBuffer(UINT64 size, const void* data)
     return resource;
 }
 
+ComPtr<ID3D12Resource> Dx12::CreateReadbackBuffer(UINT64 size)
+{
+    ComPtr<ID3D12Resource> resource        = nullptr;
+    auto                   heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
+    auto                   buffer_desc     = CD3DX12_RESOURCE_DESC::Buffer(size);
+    ThrowIfFailed(device()->CreateCommittedResource(&heap_properties,
+                                                    D3D12_HEAP_FLAG_NONE,
+                                                    &buffer_desc,
+                                                    D3D12_RESOURCE_STATE_COPY_DEST,
+                                                    nullptr,
+                                                    IID_PPV_ARGS(&resource)),
+                  "Cannot create readback buffer");
+
+    return resource;
+}
+
 ComPtr<ID3D12Resource> Dx12::CreateUAVBuffer(UINT64 size, D3D12_RESOURCE_STATES initial_state)
 {
-    ComPtr<ID3D12Resource> resource = nullptr;
-    auto heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-    auto buffer_desc = CD3DX12_RESOURCE_DESC::Buffer(size, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    ComPtr<ID3D12Resource> resource        = nullptr;
+    auto                   heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    auto                   buffer_desc =
+        CD3DX12_RESOURCE_DESC::Buffer(size, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-    ThrowIfFailed(
-        device()->CreateCommittedResource(
-            &heap_properties, D3D12_HEAP_FLAG_NONE, &buffer_desc, initial_state, nullptr, IID_PPV_ARGS(&resource)),
-        "Cannot create UAV");
+    ThrowIfFailed(device()->CreateCommittedResource(&heap_properties,
+                                                    D3D12_HEAP_FLAG_NONE,
+                                                    &buffer_desc,
+                                                    initial_state,
+                                                    nullptr,
+                                                    IID_PPV_ARGS(&resource)),
+                  "Cannot create UAV");
 
     return resource;
 }
 
 ComPtr<ID3D12Resource> Dx12::CreateConstantBuffer(UINT64 size, D3D12_RESOURCE_STATES initial_state)
 {
-    ComPtr<ID3D12Resource> resource = nullptr;
-    auto heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    ComPtr<ID3D12Resource> resource        = nullptr;
+    auto                   heap_properties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
     auto buffer_desc = CD3DX12_RESOURCE_DESC::Buffer(size, D3D12_RESOURCE_FLAG_NONE);
 
-    ThrowIfFailed(
-        device()->CreateCommittedResource(
-            &heap_properties, D3D12_HEAP_FLAG_NONE, &buffer_desc, initial_state, nullptr, IID_PPV_ARGS(&resource)),
-        "Cannot create CBV");
+    ThrowIfFailed(device()->CreateCommittedResource(&heap_properties,
+                                                    D3D12_HEAP_FLAG_NONE,
+                                                    &buffer_desc,
+                                                    initial_state,
+                                                    nullptr,
+                                                    IID_PPV_ARGS(&resource)),
+                  "Cannot create CBV");
 
     return resource;
 }
 
-ComPtr<ID3D12DescriptorHeap> Dx12::CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type, UINT descriptor_count, D3D12_DESCRIPTOR_HEAP_FLAGS flags)
+ComPtr<ID3D12DescriptorHeap> Dx12::CreateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE heap_type,
+                                                        UINT                       descriptor_count,
+                                                        D3D12_DESCRIPTOR_HEAP_FLAGS flags)
 {
     ComPtr<ID3D12DescriptorHeap> heap;
-    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {};
-    heap_desc.NumDescriptors = descriptor_count;
-    heap_desc.Type = heap_type;
-    heap_desc.Flags = flags;
-    ThrowIfFailed(device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&heap)), "Cannot create descriptor heap");
+    D3D12_DESCRIPTOR_HEAP_DESC   heap_desc = {};
+    heap_desc.NumDescriptors               = descriptor_count;
+    heap_desc.Type                         = heap_type;
+    heap_desc.Flags                        = flags;
+    ThrowIfFailed(device()->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&heap)),
+                  "Cannot create descriptor heap");
     return heap;
 }
 
-ComPtr<ID3D12Resource> Dx12::CreateResource(const D3D12_RESOURCE_DESC& desc, const D3D12_HEAP_PROPERTIES& heap_properties, D3D12_RESOURCE_STATES initial_state)
+ComPtr<ID3D12Resource> Dx12::CreateResource(const D3D12_RESOURCE_DESC&   desc,
+                                            const D3D12_HEAP_PROPERTIES& heap_properties,
+                                            D3D12_RESOURCE_STATES        initial_state)
 {
     ComPtr<ID3D12Resource> resource = nullptr;
 
-    ThrowIfFailed(
-        device()->CreateCommittedResource(
-            &heap_properties, D3D12_HEAP_FLAG_NONE, &desc, initial_state, nullptr, IID_PPV_ARGS(&resource)),
-        "Cannot create resource");
+    ThrowIfFailed(device()->CreateCommittedResource(&heap_properties,
+                                                    D3D12_HEAP_FLAG_NONE,
+                                                    &desc,
+                                                    initial_state,
+                                                    nullptr,
+                                                    IID_PPV_ARGS(&resource)),
+                  "Cannot create resource");
 
     return resource;
 }
@@ -142,16 +177,20 @@ void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)
         debug_controller->EnableDebugLayer();
 
         ComPtr<IDXGIInfoQueue> dxgi_info_queue;
-        ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue)), "Failed to retrieve debug interface");
+        ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue)),
+                      "Failed to retrieve debug interface");
 
         ThrowIfFailed(CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&dxgi_factory_)),
                       "Cannot create debug DXGI factory");
 
-        dxgi_info_queue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, true);
-        dxgi_info_queue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true);
+        dxgi_info_queue->SetBreakOnSeverity(
+            DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, true);
+        dxgi_info_queue->SetBreakOnSeverity(
+            DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true);
     }
 #else
-    ThrowIfFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory_)), "Cannot create DXGI factory");
+    ThrowIfFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory_)),
+                  "Cannot create DXGI factory");
 #endif
 
     // Now try to find the adapter.
@@ -195,23 +234,27 @@ void Dx12::InitDXGI(D3D_FEATURE_LEVEL feature_level)
     dxgi_adapter_ = adapter.Detach();
 }
 
-ComPtr<IDXGISwapChain3> Dx12::CreateSwapchain(HWND hwnd, UINT width, UINT height, UINT backbuffer_count)
+ComPtr<IDXGISwapChain3> Dx12::CreateSwapchain(HWND hwnd,
+                                              UINT width,
+                                              UINT height,
+                                              UINT backbuffer_count)
 {
     ComPtr<IDXGISwapChain1> swapchain1;
 
     DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {};
-    swapchain_desc.BufferCount = backbuffer_count;
-    swapchain_desc.Width = width;
-    swapchain_desc.Height = height;
-    swapchain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapchain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapchain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapchain_desc.SampleDesc.Count = 1;
-    ThrowIfFailed(
-        dxgi_factory()->CreateSwapChainForHwnd(command_queue(), hwnd, &swapchain_desc, nullptr, nullptr, &swapchain1),
-        "Cannot create swap chain");
+    swapchain_desc.BufferCount           = backbuffer_count;
+    swapchain_desc.Width                 = width;
+    swapchain_desc.Height                = height;
+    swapchain_desc.Format                = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapchain_desc.BufferUsage           = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapchain_desc.SwapEffect            = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapchain_desc.SampleDesc.Count      = 1;
+    ThrowIfFailed(dxgi_factory()->CreateSwapChainForHwnd(
+                      command_queue(), hwnd, &swapchain_desc, nullptr, nullptr, &swapchain1),
+                  "Cannot create swap chain");
 
-    ThrowIfFailed(dxgi_factory()->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER), "Cannot make window association");
+    ThrowIfFailed(dxgi_factory()->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER),
+                  "Cannot make window association");
 
     ComPtr<IDXGISwapChain3> swapchain;
     swapchain1->QueryInterface(IID_PPV_ARGS(&swapchain));
@@ -220,17 +263,21 @@ ComPtr<IDXGISwapChain3> Dx12::CreateSwapchain(HWND hwnd, UINT width, UINT height
 }
 ComPtr<ID3D12RootSignature> Dx12::CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC& desc)
 {
-    ComPtr<ID3DBlob> error;
-    ComPtr<ID3DBlob> signature_blob;
+    ComPtr<ID3DBlob>            error;
+    ComPtr<ID3DBlob>            signature_blob;
     ComPtr<ID3D12RootSignature> signature;
-    ThrowIfFailed(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature_blob, &error),
-                  "Cannot serialize root signature");
-    ThrowIfFailed(device()->CreateRootSignature(
-                      0, signature_blob->GetBufferPointer(), signature_blob->GetBufferSize(), IID_PPV_ARGS(&signature)),
+    ThrowIfFailed(
+        D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature_blob, &error),
+        "Cannot serialize root signature");
+    ThrowIfFailed(device()->CreateRootSignature(0,
+                                                signature_blob->GetBufferPointer(),
+                                                signature_blob->GetBufferSize(),
+                                                IID_PPV_ARGS(&signature)),
                   "Cannot create root signature");
     return signature;
 }
-ComPtr<ID3D12PipelineState> Dx12::CreatePipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
+ComPtr<ID3D12PipelineState> Dx12::CreatePipelineState(
+    const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
     ComPtr<ID3D12PipelineState> pipeline_state;
     ThrowIfFailed(device()->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline_state)),
@@ -243,12 +290,24 @@ ComPtr<ID3D12PipelineState> Dx12::CreateComputePipelineState(const D3D12_SHADER_
     ComPtr<ID3D12PipelineState> result = nullptr;
 
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
-    desc.pRootSignature = root_signature;
-    desc.CS = bytecode;
-    desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+    desc.pRootSignature                    = root_signature;
+    desc.CS                                = bytecode;
+    desc.Flags                             = D3D12_PIPELINE_STATE_FLAG_NONE;
 
     ThrowIfFailed(dx12api().device()->CreateComputePipelineState(&desc, IID_PPV_ARGS(&result)),
                   "Cannot create compute pipeline state");
+    return result;
+}
+
+ComPtr<ID3D12QueryHeap> Dx12::CreateQueryHeap(D3D12_QUERY_HEAP_TYPE type, UINT count)
+{
+    ComPtr<ID3D12QueryHeap> result = nullptr;
+
+    D3D12_QUERY_HEAP_DESC query_heap_desc{type, count, 0};
+
+    ThrowIfFailed(device_->CreateQueryHeap(&query_heap_desc, IID_PPV_ARGS(&result)),
+                  "Cannot create query heap");
+
     return result;
 }
 }  // namespace capsaicin::dx12

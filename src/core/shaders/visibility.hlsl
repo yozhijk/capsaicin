@@ -67,7 +67,7 @@ float3 CalculateDirectIllumination(float3 v, float3 n, float3 kd)
 
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
-    float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
+    float2 s = 0.5f; //Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);

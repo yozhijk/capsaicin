@@ -19,16 +19,16 @@ enum OutputType
 // TODO: remove from here later
 struct SettingsComponent
 {
-    bool vsync = false;
+    bool vsync   = false;
     bool denoise = true;
-    bool gather = true;
+    bool gather  = true;
 
     float normal_sigma = 128.f;
-    float depth_sigma = 1.f;
-    float luma_sigma = 5.f;
+    float depth_sigma  = 1.f;
+    float luma_sigma   = 5.f;
 
     float temporal_upscale_feedback = 0.95f;
-    float taa_feedback = 0.9f;
+    float taa_feedback              = 0.9f;
 
     int output = kCombined;
 };

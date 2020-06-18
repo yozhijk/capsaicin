@@ -44,7 +44,10 @@ inline std::string WideStringToString(const std::wstring& s)
     std::string temp(s.length(), ' ');
     // generates warning
     // std::copy(s.begin(), s.end(), temp.begin());
-    for (size_t i = 0; i < temp.size(); ++i) { temp[i] = static_cast<char>(s[i]); }
+    for (size_t i = 0; i < temp.size(); ++i)
+    {
+        temp[i] = static_cast<char>(s[i]);
+    }
     return temp;
 }
 
