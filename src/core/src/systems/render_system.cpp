@@ -227,7 +227,7 @@ void RenderSystem::ReadbackTimestamps(uint32_t frame_index)
 
 RenderSystem::GPUFrameData& RenderSystem::current_gpu_frame_data()
 {
-    return current_gpu_frame_data();
+    return gpu_frame_data_[current_gpu_frame_index_];
 }
 
 void RenderSystem::AddAutoreleaseResource(ComPtr<ID3D12Resource> resource)

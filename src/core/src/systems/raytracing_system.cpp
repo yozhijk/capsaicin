@@ -183,6 +183,8 @@ RaytracingSystem::~RaytracingSystem() = default;
 
 void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow)
 {
+    return;
+
     auto& settings = access.Write<SettingsComponent>()[0];
 
     auto tlas   = GetSceneTLASComponent(access, entity_query);
