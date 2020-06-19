@@ -84,7 +84,7 @@ float RasampleVariance(in uint2 xy, bool resolve)
         }
     }
 
-    return filtered_variance / total_weight;
+    return total_weight > 0.f ? (filtered_variance / total_weight) : 0.f;
 }
 
 // Edge-avoding a-trous wavelet blur with edge stoping functions, part of
@@ -115,7 +115,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     // Handle background.
     if (center_d < 1e-5f)
     {
-        g_output_color[gidx] = float4(center_color, 0.f);
+        g_output_color[gidx] = float4(center_color, center_variance);
         return;
     }
 
@@ -150,8 +150,8 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
             float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
-            // Сalculate depth and normal weight.
-            float weight = CalculateDepthWeight(center_d / 100.f, d / 100.f) * CalculateNormalWeight(center_n, n);
+            // Сalculate depth and normal weight
+            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d / 100.f, d / 100.f) * CalculateNormalWeight(center_n, n);
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;

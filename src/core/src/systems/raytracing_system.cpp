@@ -1215,7 +1215,7 @@ uint32_t RaytracingSystem::PopulateEAWOutputDescritorTable()
 {
     auto& render_system = world().GetSystem<RenderSystem>();
     auto  base_index    = render_system.AllocateDescriptorRange(12);
-    auto  history_index = (render_system.frame_count() + 1) % 2;
+    auto  history_index = (render_system.frame_count()) % 2;
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc;
     uav_desc.ViewDimension        = D3D12_UAV_DIMENSION_TEXTURE2D;
@@ -1429,6 +1429,7 @@ uint32_t RaytracingSystem::PopulateSpatialGatherDescriptorTable()
                                                   nullptr,
                                                   &uav_desc,
                                                   render_system.GetDescriptorHandleCPU(base_index));
+
     dx12api().device()->CreateUnorderedAccessView(
         gbuffer_normal_depth_.Get(),
         nullptr,

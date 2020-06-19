@@ -229,11 +229,11 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
         float4 g = g_gbuffer.Load(int3(sxy, 0));
 
         // TODO: reiterate on GBuffer culling later.
-        if (g.z != gc.z || g.w < 1e-5f || 
-            abs(g.w - gc.w) / gc.w > 0.05f)
-        {
-            continue;
-        }
+        // if (g.z != gc.z || g.w < 1e-5f ||
+        //     abs(g.w - gc.w) / gc.w > 0.05f)
+        // {
+        //     continue;
+        // }
 
         // Calculate pixel luminance.
         float v = luminance(SampleColorPoint(XYtoUV(float2(sxy), dim), dim));
@@ -243,7 +243,7 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
         num_samples += 1.f;
     }
 
-    return(num_samples > 0.f) ? (m * rcp(num_samples)) : 0.f;
+    return (num_samples > 0.f) ? (3.f * m * rcp(num_samples)) : 0.f;
 }
 
 // Temporal accumulation kernel with upscaling for low-frequency GI accumulation.
@@ -309,7 +309,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // bool skip_pixel = !Interleave2x2(this_frame_xy, g_constants.frame_count);
 
         // TODO: this feels as a bad heuristic, reiterate later.
-        if (abs(prev_gbuffer_data.w * 0.001 - gbuffer_data.w * 0.001) / (gbuffer_data.w * 0.001) > 0.2)
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.2)
         {
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.
@@ -324,12 +324,15 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // Fetch history and moments history.
         float3 history = SampleHistory(prev_frame_uv);
         float4 moments_history = SampleMomentsHistory(prev_frame_uv);
+        float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
         uint history_length = GetHistoryLength(prev_frame_uv);
 
         // Prepare current frame data.
         float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
         float luma = luminance(color);
-        float4 moment = float4(luma, luma * luma, 0.f, 1.f);
+
+        float2 m = lerp(luma_moments_spatial, float2(luma, luma * luma), min(1, history_length / 16));
+        float4 moment = float4(m, 0.f, 1.f);
 
         // if (history_length < kMaxHistoryLength)
         {

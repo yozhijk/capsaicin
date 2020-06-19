@@ -114,7 +114,7 @@ void InputSystem::HandleMouse(CameraData& camera_data, float dt)
             return;
         }
 
-        constexpr float kMouseSensitivity = 0.025f;
+        constexpr float kMouseSensitivity = 0.01525f;
         yaw_ += (float)(mouse.x - mouse_x_) * kMouseSensitivity * dt;
         pitch_ += (float)(mouse.y - mouse_y_) * kMouseSensitivity * dt;
 
