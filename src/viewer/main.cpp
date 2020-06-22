@@ -83,7 +83,7 @@ int main()
         {
             Init();
 
-            RenderSessionParams params{hwnd};
+            RenderSessionParams params {hwnd};
             InitRenderSession(&params);
             LoadSceneFromOBJ("../../../assets/sponza.obj");
             // LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");

@@ -309,7 +309,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         // bool skip_pixel = !Interleave2x2(this_frame_xy, g_constants.frame_count);
 
         // TODO: this feels as a bad heuristic, reiterate later.
-        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.2)
+        if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05)
         {
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.
