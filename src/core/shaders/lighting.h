@@ -13,8 +13,8 @@ LightSample DirectionalLight_Sample(uint count)
 {
     float t  = 2.f * 3.14 * float(count % 4096) / 4096.f;
     float ly = 100.f;
-    float lx = 200.f * sin(t);
-    float lz = 200.f * cos(t);
+    float lx = 40.f * sin(t);
+    float lz = 40.f * cos(t);
 
     LightSample ls;
     ls.direction = normalize(float3(lx, ly, lz));
