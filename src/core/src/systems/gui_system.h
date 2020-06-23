@@ -24,8 +24,8 @@ struct SettingsComponent
     bool gather  = true;
 
     float normal_sigma = 128.f;
-    float depth_sigma  = 1.f;
-    float luma_sigma   = 5.f;
+    float depth_sigma  = 0.01f;
+    float luma_sigma   = 1.f;
 
     float temporal_upscale_feedback = 0.95f;
     float taa_feedback              = 0.9f;

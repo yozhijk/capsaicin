@@ -73,6 +73,7 @@ float3 ReconstructWorldPosition(in float2 uv)
     float3 o = g_camera.position;
 
     float t = g_gbuffer.Load(int3(UVtoXY(uv, frame_buffer_size), 0)).w;
+
     return o + t * d;
 }
 
@@ -348,6 +349,38 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     }
 }
 
+float2 DilatedVelocityXY(in float2 xy)
+{
+    // Fetch GBuffer data.
+    float4 gbuffer_data = g_gbuffer.Load(int3(xy, 0));
+
+    // We need to look for closest depth.
+    float closest_depth = gbuffer_data.w;
+    int cx = 0;
+    int cy = 0;
+
+    for (int dx = -1; dx <= 1; ++dx)
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            int2 tap_xy = int2(xy) + int2(dx, dy);
+
+            if (tap_xy.x >= g_constants.width || tap_xy.y >= g_constants.height ||
+                tap_xy.x < 0 || tap_xy.y < 0)
+                continue;
+
+            float4 g = g_gbuffer.Load(int3(tap_xy, 0));
+
+            if (g.w != 0.f && g.w < closest_depth)
+            {
+                closest_depth = g.w;
+                cx = dx;
+                cy = dy;
+            }
+        }
+
+    return xy + float2(cx, cy);
+}
+
 // Traditional TAA kernel with some optimizations described in 
 // "A Survey of Temporal Antialiasing Techniques" Eurographics 2020, Lei Yang, Shiqiu Liu, Marco Salvi
 // http://behindthepixels.io/assets/files/TemporalAA.pdf
@@ -363,6 +396,8 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     float2 this_frame_xy = gidx;
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
 
+    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
+
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
     float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
@@ -372,14 +407,11 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
 
     // Reconstruct previous frame UV.
     float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
-    // float speed = length(prev_frame_uv - this_frame_uv);
-
-    // Fetch GBuffer data.
-    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
+    float speed = length(prev_frame_uv - this_frame_uv);
 
     // Check if the fragment is outside of previous view frustum or this is first frame.
     bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
-        gbuffer_data.w < 1e-5f;
+                            gbuffer_data.w < 1e-5f;
 
     if (disocclusion)
     {
@@ -392,22 +424,26 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         float2 prev_frame_xy = UVtoXY(prev_frame_uv, frame_buffer_size);
 
         // Perform velocity adjustment.
-        float velocity_adjustment = 0; //g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.3, 0.1f / speed)) : 0.f;
-        float alpha = g_constants.alpha - velocity_adjustment;
+        // float velocity_adjustment = g_constants.adjust_velocity != 0 ? (min(g_constants.alpha * 0.3, 0.1f / speed)) : 0.f;
+        // float alpha = g_constants.alpha - velocity_adjustment;
+
+        float velocity_adjustment = max(0.f, 1.f - 0.05f / speed);
+        float alpha = max(0.1f, g_constants.alpha - velocity_adjustment);
 
         // Fetch geometric data to assist rectification.
-        float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
-        if (abs(prev_gbuffer_data.w * 0.001 - gbuffer_data.w * 0.001) / (gbuffer_data.w * 0.001) > 0.2)
-        {
-            alpha = 0.6f;
-        }
+        // float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
+        // if (abs(prev_gbuffer_data.w - gbuffer_data.w) / gbuffer_data.w > 0.05)
+        // {
+        //      g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv, frame_buffer_size), 1.f);
+        //      return;
+        // }
 
         // Fetch color and history.
         float3 history = RGB2YCoCg(SimpleTonemap(SampleHistory(prev_frame_uv)));
         float3 color = RGB2YCoCg(SimpleTonemap(SampleColor(this_frame_uv, frame_buffer_size)));
 
         // Calculate neighbourhood color AABB.
-        AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, frame_buffer_size, 1.f);
+        AABB color_aabb = CalculateNeighbourhoodColorAABB(gidx, frame_buffer_size, 0.75f);
 
         // Clip history to AABB.
         history = ClipToAABB(color_aabb, history);

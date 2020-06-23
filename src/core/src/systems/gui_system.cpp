@@ -71,9 +71,9 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     ImGui::Checkbox("Vsync", &settings.vsync);
     ImGui::Separator();
     ImGui::Checkbox("Enable SVGF", &settings.denoise);
-    ImGui::SliderFloat("Normal sigma", &settings.normal_sigma, 32.f, 1024.f);
-    ImGui::SliderFloat("Depth sigma", &settings.depth_sigma, 0.01f, 5.f);
-    ImGui::SliderFloat("Luminance sigma", &settings.luma_sigma, 0.01f, 20.f);
+    ImGui::SliderFloat("Normal sigma", &settings.normal_sigma, 32.f, 256.f);
+    ImGui::SliderFloat("Depth sigma", &settings.depth_sigma, 0.001f, 1.f);
+    ImGui::SliderFloat("Luminance sigma", &settings.luma_sigma, 0.01f, 3.f);
     ImGui::Separator();
     ImGui::Checkbox("Enable spatial gather", &settings.gather);
     ImGui::Separator();

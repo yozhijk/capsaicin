@@ -59,8 +59,7 @@ float3 CalculateDirectIllumination(float3 v, float3 n, float3 kd)
 
     TraceRay(g_scene, RAY_FLAG_FORCE_OPAQUE, ~0, 1, 0, 1, shadow_ray, payload);
 
-    if (payload.hit)
-        return 0.f;
+    if (payload.hit) return 0.f;
 
     return ss.intensity * kd * Lambert_Evaluate(n, ss.direction) * max(dot(n, ss.direction), 0.0);
 }
@@ -68,7 +67,7 @@ float3 CalculateDirectIllumination(float3 v, float3 n, float3 kd)
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
     // TODO: debug
-    float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count);
+    float2 s = Sample2D_Hammersley(xy, g_constants.frame_count, 4);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);

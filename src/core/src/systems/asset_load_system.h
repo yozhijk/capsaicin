@@ -41,9 +41,9 @@ struct MeshComponent
 class AssetLoadSystem : public System
 {
 public:
-    static constexpr uint32_t kVertexPoolSize = 40000000;
-    static constexpr uint32_t kIndexPoolSize  = 40000000;
-    static constexpr uint32_t kMeshPoolSize   = 30000;
+    static constexpr uint32_t kVertexPoolSize = 60000000;
+    static constexpr uint32_t kIndexPoolSize  = 60000000;
+    static constexpr uint32_t kMeshPoolSize   = 50000;
     AssetLoadSystem();
     ~AssetLoadSystem() override = default;
 
