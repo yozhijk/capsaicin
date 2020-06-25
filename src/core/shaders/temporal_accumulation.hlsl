@@ -1,9 +1,5 @@
 
-#include "camera.h"
-#include "sampling.h"
-#include "color_space.h"
-#include "math_functions.h"
-#include "aabb.h"
+#include "data_payload.h"
 
 #define TILE_SIZE 8
 
@@ -31,6 +27,12 @@ RWTexture2D<float4> g_moments_history : register(u3);
 RWTexture2D<float4> g_prev_gbuffer : register(u4);
 RWTexture2D<float4> g_output_color_history : register(u5);
 RWTexture2D<float4> g_output_moments_history : register(u6);
+
+#include "camera.h"
+#include "sampling.h"
+#include "color_space.h"
+#include "math_functions.h"
+#include "aabb.h"
 
 float2 UVtoXY(in float2 uv, in uint2 dim)
 {

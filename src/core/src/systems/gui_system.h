@@ -31,6 +31,7 @@ struct SettingsComponent
     float taa_feedback              = 0.9f;
 
     int output = kCombined;
+    int num_diffuse_bounces = 1u;
 };
 
 class GUISystem : public System

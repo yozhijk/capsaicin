@@ -1,22 +1,8 @@
+// clang-format off
 #ifndef CAMERA_H
 #define CAMERA_H
 
-struct Camera
-{
-    float3 position;
-    float focal_length;
-
-    float3 right;
-    float znear;
-
-    float3 forward;
-    float focus_distance;
-
-    float3 up;
-    float aperture;
-
-    float2 sensor_size;
-};
+#include "sampling.h"
 
 float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
 {
@@ -48,4 +34,29 @@ float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
     return 0.5f * float2(u, v) + 0.5f;
 }
 
+RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
+{
+    // TODO: debug
+    float2 s = Sample2D_Hammersley(xy, g_constants.frame_count, 4);
+
+    // Calculate [0..1] image plane sample
+    float2 img_sample = (float2(xy) + s) / float2(dim);
+
+    // Transform into [-0.5, 0.5]
+    float2 h_sample = img_sample - float2(0.5f, 0.5f);
+    // Transform into [-dim/2, dim/2]
+    float2 c_sample = h_sample * g_camera.sensor_size;
+
+    RayDesc my_ray;
+    // Calculate direction to image plane
+    my_ray.Direction =
+        normalize(g_camera.focal_length * g_camera.forward + c_sample.x * g_camera.right + c_sample.y * g_camera.up);
+    // Origin == camera position + nearz * d
+    my_ray.Origin = g_camera.position;
+    my_ray.TMin = 0.0f;
+    my_ray.TMax = 1e6f;
+    return my_ray;
+}
+
 #endif // CAMERA_H
+// clang-format on

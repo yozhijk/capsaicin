@@ -51,7 +51,7 @@ GUISystem::~GUISystem()
 void GUISystem::RenderGUI(SettingsComponent& settings)
 {
     ImGui::Begin("Frame statistics");
-    ImGui::SetWindowSize(ImVec2(280.f, 290.f));
+    ImGui::SetWindowSize(ImVec2(280.f, 500.f));
     ImGui::SetWindowPos(ImVec2(20.f, 20.f));
 
     // ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings
@@ -69,6 +69,8 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     const char* outputs[] = {"Combined", "Direct", "Indirect", "Variance"};
 
     ImGui::Checkbox("Vsync", &settings.vsync);
+    ImGui::Separator();
+    ImGui::SliderInt("Diffuse bounces", &settings.num_diffuse_bounces, 0, 5);
     ImGui::Separator();
     ImGui::Checkbox("Enable SVGF", &settings.denoise);
     ImGui::SliderFloat("Normal sigma", &settings.normal_sigma, 32.f, 256.f);
