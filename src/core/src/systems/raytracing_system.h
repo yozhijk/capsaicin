@@ -87,7 +87,7 @@ private:
 
     void Denoise(uint32_t descriptor_table, const SettingsComponent& settings);
 
-    void SpatialGather(uint32_t descriptor_table, const SettingsComponent& settings);
+    void SpatialGather(uint32_t descriptor_table, uint32_t blue_noise_descriptor_table, const SettingsComponent& settings);
 
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputIndirectDescriptorTable();

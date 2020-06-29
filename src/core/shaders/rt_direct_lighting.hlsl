@@ -65,7 +65,7 @@ void CalculateDirectLighting()
 
     float3 kd = GetMaterial(instance_index, tx);
 
-    if (all(kd < 1e-5f) || dot(-primary_ray.Direction, n) <= 0.f)
+    if (all(kd < 1e-5f))
     {
         g_output_direct[xy]         = float4(0.f, 0.f, 0.f, 1.f);
         g_output_albedo[xy]         = 0.f;

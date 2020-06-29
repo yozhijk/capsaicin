@@ -14,6 +14,9 @@ ConstantBuffer<Constants> g_constants : register(b0);
 RWTexture2D<float4> g_color : register(u0);
 RWTexture2D<float4> g_gbuffer : register(u1);
 RWTexture2D<float4> g_output_color : register(u2);
+Texture2D<float4> g_blue_noise: register(t0);
+
+#include "sampling.h"
 
 float CalculateNormalWeight(float3 n0, float3 n1)
 {
@@ -23,10 +26,9 @@ float CalculateNormalWeight(float3 n0, float3 n1)
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    const float kDepthSigma = 0.1f;
-    return Gaussian(d0, d1, kDepthSigma);
+    const float kDepthSigma = 1.f;
+    return Gaussian(abs(d0 - d1), 0.f, kDepthSigma);
 }
-
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Gather(in uint2 gidx: SV_DispatchThreadID,
@@ -51,36 +53,72 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
         return;
     }
 
-    // Filter neighbourhood.
-    const int kRadius = 3;
-    for (int dy = -kRadius; dy <= kRadius; ++dy)
+    const uint kNumSamples = 16;
+    const uint kScale = 16;
+
+    for (uint si = 0; si < kNumSamples; ++si)
     {
-        for (int dx = -kRadius; dx <= kRadius; ++dx)
+        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, gidx, g_constants.frame_count / kNumSamples + si) - 0.5f;
+        s *= kScale;
+
+        int2 xy = int2(gidx) + int2(s);
+
+        if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
         {
-            int2 xy = int2(gidx) + int2(dx * g_constants.stride, dy * g_constants.stride);
-
-            if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
-            {
-                continue;
-            }
-
-            float3 c = g_color[xy].xyz;
-            float4 g = g_gbuffer.Load(int3(xy, 0));
-            float3 n = OctDecode(g.xy);
-            float  d = g.w;
-
-            // Skip background.
-            if (d < 1e-5f || g.z != center_g.z)
-            {
-                continue;
-            }
-
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d);
-
-            filtered_color += weight * c;
-            total_weight += weight;
+            continue;
         }
+
+        float3 c = g_color[xy].xyz;
+        float4 g = g_gbuffer.Load(int3(xy, 0));
+        float3 n = OctDecode(g.xy);
+        float  d = g.w;
+
+        // Skip background.
+        if (d < 1e-5f)
+        {
+            continue;
+        }
+
+        float weight = Gaussian(length(s), 0.f, 3.f);
+        weight *= CalculateNormalWeight(center_n, n);
+        weight *= CalculateDepthWeight(center_d, d);
+
+
+        filtered_color += weight * c;
+        total_weight += weight;
     }
+ 
+
+    // Filter neighbourhood.
+    // const int kRadius = 3;
+    // for (int dy = -kRadius; dy <= kRadius; ++dy)
+    // {
+    //     for (int dx = -kRadius; dx <= kRadius; ++dx)
+    //     {
+    //         int2 xy = int2(gidx) + int2(dx * g_constants.stride, dy * g_constants.stride);
+
+    //         if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
+    //         {
+    //             continue;
+    //         }
+
+    //         float3 c = g_color[xy].xyz;
+    //         float4 g = g_gbuffer.Load(int3(xy, 0));
+    //         float3 n = OctDecode(g.xy);
+    //         float  d = g.w;
+
+    //         // Skip background.
+    //         if (d < 1e-5f)
+    //         {
+    //             continue;
+    //         }
+
+    //         float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d);
+
+    //         filtered_color += weight * c;
+    //         total_weight += weight;
+    //     }
+    // }
 
     // Output filtered color and variance.
     center_color = (total_weight < EPS) ? center_color : (filtered_color / total_weight);

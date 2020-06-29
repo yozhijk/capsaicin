@@ -88,7 +88,7 @@ void CalculateIndirectDiffuseLighting()
         float3 kd = GetMaterial(payload.instance_index, tx);
 
         // If no contribution possible, bail out.
-        if (all(kd < 1e-5f) || dot(-ray.Direction, n) <= 0.f)
+        if (all(kd < 1e-5f))
         {
             break;
         }
@@ -118,7 +118,7 @@ void CalculateIndirectDiffuseLighting()
             break;
         }
 
-        throughput *= (ss.brdf * max(0.f, dot(n, ss.direction)) / ss.pdf);
+        throughput *= (ss.brdf * abs(dot(n, ss.direction)) / ss.pdf);
 
         if (bounce != 0)
         {

@@ -19,12 +19,12 @@ float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
     float3 n = normalize(camera.forward);
     float3 p = o + n * camera.focal_length;
 
-    if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
+    //if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
 
     // Intersection distance to an image plane.
     float t = dot(n, p - o) / dot(n, d);
 
-    if (t <= 0.f) return float2(-1000.f, -1000.f);
+    // if (t <= 0.f) return float2(-1000.f, -1000.f);
 
     float3 ip = o + t * d;
     float3 ipd = (ip - p);
@@ -37,7 +37,8 @@ float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
 RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
 {
     // TODO: debug
-    float2 s = Sample2D_Hammersley(xy, g_constants.frame_count, 4);
+    // float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
+    float2 s = Sample2D_Halton23(g_constants.frame_count);
 
     // Calculate [0..1] image plane sample
     float2 img_sample = (float2(xy) + s) / float2(dim);

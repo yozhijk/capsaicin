@@ -29,8 +29,8 @@ float CalculateNormalWeight(float3 n0, float3 n1)
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    float v = abs(d0 - d1) / (g_constants.depth_sigma * d0);
-    return exp(-v);
+    float v = abs(d0 - d1) / (g_constants.depth_sigma * g_constants.depth_sigma);
+    return exp(-0.5f * v);
 }
 
 float CalculateLumaWeight(float l0, float l1, float var)
@@ -87,6 +87,11 @@ float RasampleVariance(in uint2 xy, bool resolve)
     return total_weight > 0.f ? (filtered_variance / total_weight) : 0.f;
 }
 
+float3 SampleColorRemoveFireflies(in uint2 xy)
+{
+    return min(g_color[xy].xyz, 1.f);
+}
+
 // Edge-avoding a-trous wavelet blur with edge stoping functions, part of
 // "Spatiotemporal Variance-Guided Filtering: Real-Time Reconstruction for Path-Traced Global Illumination" Schied et Al
 // https://research.nvidia.com/sites/default/files/pubs/2017-07_Spatiotemporal-Variance-Guided-Filtering%3A//svgf_preprint.pdf
@@ -109,7 +114,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     float4 center_g = g_gbuffer.Load(int3(gidx, 0));
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
-    float3 center_color = g_color[gidx].xyz;
+    float3 center_color = SampleColorRemoveFireflies(gidx);
     float center_variance = RasampleVariance(gidx, resolve_moments);
 
     // Handle background.
@@ -135,7 +140,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
                 continue;
             }
 
-            float3 c = g_color[xy].xyz;
+            float3 c = SampleColorRemoveFireflies(xy);
             float4 g = g_gbuffer.Load(int3(xy, 0));
             float3 n = OctDecode(g.xy);
             float  d = g.w;
@@ -151,7 +156,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             // Calculate EAW weight.
             float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
             // Сalculate depth and normal weight
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d / 100.f, d / 100.f) * CalculateNormalWeight(center_n, n);
+            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;
