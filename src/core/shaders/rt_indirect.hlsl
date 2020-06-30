@@ -42,14 +42,22 @@ RWTexture2D<float4> g_output_indirect : register(u6);
 [shader("raygeneration")]
 void CalculateIndirectDiffuseLighting()
 {
+    // These are half-res indices.
     uint2 xy = DispatchRaysIndex();
     uint2 dims = DispatchRaysDimensions();
 
+    // We are interleaving in 2x2 fullres regions.
+    uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
+                            (g_constants.frame_count % 4) % 2);
+
+    uint2 fullres_dims = dims << 1;
+    uint2 fullres_xy = (xy << 1) + sp_offset;
+
     // Reconstruct primary ray to determine backface hits.
-    RayDesc ray = CreatePrimaryRay(xy, dims);
+    RayDesc ray = CreatePrimaryRay(fullres_xy, fullres_dims);
 
     // Load GBuffer information and decode.
-    float4 g            = g_gbuffer_geo[xy];
+    float4 g            = g_gbuffer_geo[fullres_xy];
     float2 uv           = g.xy;
     uint instance_index = asuint(g.z);
     uint prim_index     = asuint(g.w);
@@ -102,7 +110,7 @@ void CalculateIndirectDiffuseLighting()
         }
 
         // Generate random sample for BRDF sampling.
-        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count * 25 + bounce);
+        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, fullres_xy, g_constants.frame_count * 25 + bounce);
 
         // Sample Lambertian BRDF.
         BrdfSample ss = Lambert_Sample(s, n);

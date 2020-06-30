@@ -26,7 +26,7 @@ LightSample DirectionalLight_Sample(uint count)
 
     LightSample ls;
     ls.direction = normalize(float3(lx, ly, lz));
-    ls.intensity = 1.f * (3.f * float3(14.f, 12.f, 10.f) + float3(0.f, 0.f, 2.f + 2.f * cos(t)));
+    ls.intensity = 0.05f * (3.f * float3(14.f, 12.f, 10.f) + float3(0.f, 0.f, 2.f + 2.f * cos(t)));
     ls.pdf       = 1.f;
     ls.distance  = 100000.f;
     return ls;
@@ -57,7 +57,7 @@ float3 CalculateDirectIllumination(in float3 v, in float3 n, in float3 kd, in ui
     if (payload.hit)
         return 0.f;
 
-    return ss.intensity * kd * Lambert_Evaluate(n, ss.direction) * abs(dot(n, ss.direction));
+    return ss.intensity * kd * Lambert_Evaluate(n, ss.direction) * max(0.f, dot(n, ss.direction));
 }
 
 [shader("anyhit")]

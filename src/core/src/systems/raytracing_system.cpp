@@ -469,8 +469,8 @@ void RaytracingSystem::CreateRenderOutputs()
                                          D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // Half resolution indirect.
-            // texture_desc.Width >>= 1;
-            // texture_desc.Height >>= 1;
+            texture_desc.Width >>= 1;
+            texture_desc.Height >>= 1;
             output_indirect_ =
                 dx12api().CreateResource(texture_desc,
                                          CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -1112,18 +1112,15 @@ void RaytracingSystem::CalculateIndirectLighting(ID3D12Resource* scene,
                                                  const SettingsComponent& settings)
 {
     auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  window_width         = render_system.window_width();
-    auto  window_height        = render_system.window_height();
+    auto  width                = render_system.window_width() >> 1;
+    auto  height               = render_system.window_height() >> 1;
     auto  command_allocator    = render_system.current_frame_command_allocator();
     auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
     auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
     auto [start_time_index, end_time_index] =
         render_system.AllocateTimestampQueryPair("RT Indirect diffuse");
 
-    Constants constants{render_system.window_width(),
-                        render_system.window_height(),
-                        render_system.frame_count(),
-                        settings.num_diffuse_bounces};
+    Constants constants{width, height, render_system.frame_count(), settings.num_diffuse_bounces};
 
     ComPtr<ID3D12GraphicsCommandList4> cmdlist4 = nullptr;
     rt_indirect_command_list_->QueryInterface(IID_PPV_ARGS(&cmdlist4));
@@ -1172,8 +1169,8 @@ void RaytracingSystem::CalculateIndirectLighting(ID3D12Resource* scene,
         rt_indirect_raygen_shader_table->GetGPUVirtualAddress();
     dispatch_desc.RayGenerationShaderRecord.SizeInBytes =
         rt_indirect_raygen_shader_table->GetDesc().Width;
-    dispatch_desc.Width  = window_width;
-    dispatch_desc.Height = window_height;
+    dispatch_desc.Width  = width;
+    dispatch_desc.Height = height;
     dispatch_desc.Depth  = 1;
 
     cmdlist4->SetPipelineState1(rt_indirect_pipeline_state_.Get());
@@ -1198,20 +1195,16 @@ void RaytracingSystem::IntegrateTemporally(ID3D12Resource*          camera,
                                            const SettingsComponent& settings)
 {
     auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  window_width         = render_system.window_width();
-    auto  window_height        = render_system.window_height();
+    auto  width                = render_system.window_width();
+    auto  height               = render_system.window_height();
     auto  command_allocator    = render_system.current_frame_command_allocator();
     auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
     auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
     auto [start_time_index, end_time_index] =
         render_system.AllocateTimestampQueryPair("Temporal upscale");
 
-    TAConstants constants{render_system.window_width(),
-                          render_system.window_height(),
-                          render_system.frame_count(),
-                          0,
-                          settings.temporal_upscale_feedback,
-                          0};
+    TAConstants constants{
+        width, height, render_system.frame_count(), 0, settings.temporal_upscale_feedback, 0};
 
     indirect_ta_command_list_->Reset(command_allocator, nullptr);
     indirect_ta_command_list_->EndQuery(
@@ -1238,8 +1231,7 @@ void RaytracingSystem::IntegrateTemporally(ID3D12Resource*          camera,
         TemporalAccumulateRootSignature::kHistory,
         render_system.GetDescriptorHandleGPU(history_descriptor_table));
 
-    indirect_ta_command_list_->Dispatch(
-        ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+    indirect_ta_command_list_->Dispatch(ceil_divide(width, 8), ceil_divide(height, 8), 1);
 
     indirect_ta_command_list_->ResourceBarrier(
         1,
@@ -1451,8 +1443,8 @@ void RaytracingSystem::SpatialGather(uint32_t                 descriptor_table,
                                      const SettingsComponent& settings)
 {
     auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  width                = render_system.window_width();
-    auto  height               = render_system.window_height();
+    auto  width                = render_system.window_width() >> 1;
+    auto  height               = render_system.window_height() >> 1;
     auto  command_allocator    = render_system.current_frame_command_allocator();
     auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
     auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();

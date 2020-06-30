@@ -20,13 +20,13 @@ Texture2D<float4> g_blue_noise: register(t0);
 
 float CalculateNormalWeight(float3 n0, float3 n1)
 {
-    const float kNormalSigma = 128.f;
+    const float kNormalSigma = 64.f;
     return pow(max(dot(n0, n1), 0.0), kNormalSigma);
 }
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    const float kDepthSigma = 1.f;
+    const float kDepthSigma = 3.f;
     return Gaussian(abs(d0 - d1), 0.f, kDepthSigma);
 }
 
@@ -38,10 +38,17 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
+    // We are interleaving in 2x2 fullres regions.
+    uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
+                            (g_constants.frame_count % 4) % 2);
+
+    uint2 fullres_dims = uint2(g_constants.width, g_constants.height) << 1;
+    uint2 fullres_center_xy = (gidx << 1) + sp_offset;
+
     float3 filtered_color = 0.f;
     float total_weight = 0.f;
 
-    float4 center_g = g_gbuffer.Load(int3(gidx, 0));
+    float4 center_g = g_gbuffer.Load(int3(fullres_center_xy, 0));
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
     float3 center_color = g_color[gidx].xyz;
@@ -54,11 +61,13 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     }
 
     const uint kNumSamples = 16;
-    const uint kScale = 16;
+    const uint kScale = 32;
 
     for (uint si = 0; si < kNumSamples; ++si)
     {
-        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, gidx, g_constants.frame_count / kNumSamples + si) - 0.5f;
+        float2 s = Sample2D_BlueNoise4x4(g_blue_noise,
+                                      fullres_center_xy,
+                                      g_constants.frame_count / kNumSamples + si) - 0.5f;
         s *= kScale;
 
         int2 xy = int2(gidx) + int2(s);
@@ -68,8 +77,10 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
             continue;
         }
 
+        uint2 fullres_xy = (xy << 1) + sp_offset;
+
         float3 c = g_color[xy].xyz;
-        float4 g = g_gbuffer.Load(int3(xy, 0));
+        float4 g = g_gbuffer.Load(int3(fullres_xy, 0));
         float3 n = OctDecode(g.xy);
         float  d = g.w;
 
@@ -95,15 +106,17 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     // {
     //     for (int dx = -kRadius; dx <= kRadius; ++dx)
     //     {
-    //         int2 xy = int2(gidx) + int2(dx * g_constants.stride, dy * g_constants.stride);
+    //         int2 xy = int2(gidx) + int2(dx, dy);
 
     //         if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
     //         {
     //             continue;
     //         }
 
+    //         uint2 fullres_xy = (xy << 1) + sp_offset;
+
     //         float3 c = g_color[xy].xyz;
-    //         float4 g = g_gbuffer.Load(int3(xy, 0));
+    //         float4 g = g_gbuffer.Load(int3(fullres_xy, 0));
     //         float3 n = OctDecode(g.xy);
     //         float  d = g.w;
 

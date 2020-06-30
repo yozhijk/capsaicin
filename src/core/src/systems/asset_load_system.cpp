@@ -111,9 +111,9 @@ void LoadObjFile(AssetComponent&        asset,
                 mesh_data.indices.push_back(vertex_index);
                 index_cache[index] = vertex_index;
 
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index]);
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 1]);
-                mesh_data.positions.push_back(attrib.vertices[3 * index.vertex_index + 2]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index + 1]);
+                mesh_data.positions.push_back(0.01f * attrib.vertices[3 * index.vertex_index + 2]);
 
                 if (index.normal_index != -1)
                 {
