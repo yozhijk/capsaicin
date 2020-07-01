@@ -23,6 +23,7 @@ enum
     kTextures,
     kSceneData,
     kGBuffer,
+    kIndirectLightingHistory,
     kOutputIndirectLighting,
     kNumEntries
 };
@@ -281,6 +282,7 @@ void RaytracingSystem::Run(ComponentAccess& access, EntityQuery& entity_query, t
                               scene_textures_descriptor_table,
                               internal_descriptor_table,
                               gbuffer_descriptor_table,
+                              history_descriptor_table,
                               output_indirect_descritor_table,
                               settings);
 
@@ -326,8 +328,11 @@ void RaytracingSystem::InitInidirectLightingPipeline()
         CD3DX12_DESCRIPTOR_RANGE gbuffer_descriptor_range;
         gbuffer_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
 
+        CD3DX12_DESCRIPTOR_RANGE indirect_history_descriptor_range;
+        indirect_history_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+
         CD3DX12_DESCRIPTOR_RANGE output_indirect_descriptor_range;
-        output_indirect_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+        output_indirect_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
 
         CD3DX12_DESCRIPTOR_RANGE scene_data_descriptor_range;
         scene_data_descriptor_range.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0);
@@ -353,6 +358,8 @@ void RaytracingSystem::InitInidirectLightingPipeline()
             1, &scene_data_descriptor_range);
         root_entries[IndirectLightingRootSignature::kGBuffer].InitAsDescriptorTable(
             1, &gbuffer_descriptor_range);
+        root_entries[IndirectLightingRootSignature::kIndirectLightingHistory].InitAsDescriptorTable(
+            1, &indirect_history_descriptor_range);
         root_entries[IndirectLightingRootSignature::kOutputIndirectLighting].InitAsDescriptorTable(
             1, &output_indirect_descriptor_range);
 
@@ -1108,6 +1115,7 @@ void RaytracingSystem::CalculateIndirectLighting(ID3D12Resource* scene,
                                                  uint32_t        scene_textures_descriptor_table,
                                                  uint32_t        internal_descriptor_table,
                                                  uint32_t        gbuffer_descriptor_table,
+                                                 uint32_t        indirect_history_descriptor_table,
                                                  uint32_t        output_indirect_descriptor_table,
                                                  const SettingsComponent& settings)
 {
@@ -1153,6 +1161,9 @@ void RaytracingSystem::CalculateIndirectLighting(ID3D12Resource* scene,
     cmdlist4->SetComputeRootDescriptorTable(
         IndirectLightingRootSignature::kGBuffer,
         render_system.GetDescriptorHandleGPU(gbuffer_descriptor_table));
+    cmdlist4->SetComputeRootDescriptorTable(
+        IndirectLightingRootSignature::kIndirectLightingHistory,
+        render_system.GetDescriptorHandleGPU(indirect_history_descriptor_table));
     cmdlist4->SetComputeRootDescriptorTable(
         IndirectLightingRootSignature::kOutputIndirectLighting,
         render_system.GetDescriptorHandleGPU(output_indirect_descriptor_table));

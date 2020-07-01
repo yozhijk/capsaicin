@@ -30,7 +30,8 @@ RWBuffer<float> g_normal_buffer : register(u2);
 RWBuffer<float2> g_texcoord_buffer : register(u3);
 RWStructuredBuffer<Mesh> g_mesh_buffer : register(u4);
 RWTexture2D<float4> g_gbuffer_geo : register(u5);
-RWTexture2D<float4> g_output_indirect : register(u6);
+RWTexture2D<float4> g_color_history : register(u6);
+RWTexture2D<float4> g_output_indirect : register(u7);
 
 #include "lighting.h"
 #include "math_functions.h"
@@ -84,6 +85,9 @@ void CalculateIndirectDiffuseLighting()
         float3 p, n;
         float2 tx;
         InterpolateAttributes(payload.instance_index, payload.prim_index, payload.uv, p, n, tx);
+
+        // If this point already present in history - return shaded result.
+        
 
         float3 kd = GetMaterial(payload.instance_index, tx);
 

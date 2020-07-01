@@ -66,6 +66,7 @@ private:
                                    uint32_t        scene_textures_descriptor_table,
                                    uint32_t        internal_descriptor_table,
                                    uint32_t        gbuffer_descriptor_table,
+                                   uint32_t        indirect_history_descriptor_table,
                                    uint32_t        output_indirect_descriptor_table,
                                    const SettingsComponent& settings);
 
