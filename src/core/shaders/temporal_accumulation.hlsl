@@ -338,7 +338,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
     float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
-    
+
     // Fetch GBuffer data.
     float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
 
@@ -528,7 +528,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         if (!is_static)
         {
             float velocity_adjustment = max(velocity / 8.f, 1.f);
-            alpha = 0.98f - velocity_adjustment * 0.12f;
+            alpha = 0.98f - velocity_adjustment * 0.15f;
             color_aabb_scale = 5.f - velocity_adjustment * 4.f;
         }
         else
