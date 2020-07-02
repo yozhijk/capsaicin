@@ -46,12 +46,18 @@ void CalculateIndirectDiffuseLighting()
     uint2 xy = DispatchRaysIndex();
     uint2 dims = DispatchRaysDimensions();
 
+
+#ifdef LOWRES_INDIRECT
     // We are interleaving in 2x2 fullres regions.
     uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
                             (g_constants.frame_count % 4) % 2);
 
     uint2 fullres_dims = dims << 1;
     uint2 fullres_xy = (xy << 1) + sp_offset;
+#else
+    uint2 fullres_dims = dims;
+    uint2 fullres_xy = xy;
+#endif
 
     // Reconstruct primary ray to determine backface hits.
     RayDesc ray = CreatePrimaryRay(fullres_xy, fullres_dims);

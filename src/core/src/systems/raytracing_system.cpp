@@ -176,7 +176,7 @@ auto GetCamera(ComponentAccess& access, EntityQuery& entity_query)
 }
 }  // namespace
 
-RaytracingSystem::RaytracingSystem()
+RaytracingSystem::RaytracingSystem(const RaytracingOptions& options) : options_(options)
 {
     info("RaytracingSystem: Initializing");
 
@@ -363,8 +363,15 @@ void RaytracingSystem::InitInidirectLightingPipeline()
         rt_indirect_root_signature_ = dx12api().CreateRootSignature(desc);
     }
 
+    std::vector<std::string> defines;
+
+    if (options_.lowres_indirect)
+    {
+        defines.push_back("LOWRES_INDIRECT");
+    }
+
     auto shader = ShaderCompiler::instance().CompileFromFile(
-        "../../../src/core/shaders/rt_indirect.hlsl", "lib_6_3", "");
+        "../../../src/core/shaders/rt_indirect.hlsl", "lib_6_3", "", defines);
 
     CD3DX12_STATE_OBJECT_DESC pipeline{D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE};
 
@@ -469,8 +476,12 @@ void RaytracingSystem::CreateRenderOutputs()
                                          D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
             // Half resolution indirect.
-            texture_desc.Width >>= 1;
-            texture_desc.Height >>= 1;
+            if (options_.lowres_indirect)
+            {
+                texture_desc.Width >>= 1;
+                texture_desc.Height >>= 1;
+            }
+
             output_indirect_ =
                 dx12api().CreateResource(texture_desc,
                                          CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -576,8 +587,24 @@ void RaytracingSystem::InitTemporalAccumulatePipelines()
 
     // Temporal accumulation.
     {
+        std::vector<std::string> defines;
+
+        if (options_.lowres_indirect)
+        {
+            defines.push_back("UPSCALE2X");
+        }
+
+        if (options_.use_variance)
+        {
+            // We only use SVGF for fullres.
+            defines.push_back("CALCULATE_VARIANCE");
+        }
+
         auto shader = ShaderCompiler::instance().CompileFromFile(
-            "../../../src/core/shaders/temporal_accumulation.hlsl", "cs_6_3", "Accumulate");
+            "../../../src/core/shaders/temporal_accumulation.hlsl",
+            "cs_6_3",
+            "Accumulate",
+            defines);
 
         ta_pipeline_state_ = dx12api().CreateComputePipelineState(shader, ta_root_signature_.Get());
     }
@@ -616,8 +643,16 @@ void RaytracingSystem::InitEAWDenoisePipeline()
         eaw_root_signature_ = dx12api().CreateRootSignature(desc);
     }
 
+    std::vector<std::string> defines;
+
+    if (options_.use_variance)
+    {
+        // We only use SVGF for fullres.
+        defines.push_back("USE_VARIANCE");
+    }
+
     auto shader = ShaderCompiler::instance().CompileFromFile(
-        "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur");
+        "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur", defines);
 
     eaw_pipeline_state_ = dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
 }
@@ -670,8 +705,15 @@ void RaytracingSystem::InitSpatialGatherPipeline()
         sg_root_signature_ = dx12api().CreateRootSignature(desc);
     }
 
+    std::vector<std::string> defines;
+
+    if (options_.lowres_indirect)
+    {
+        defines.push_back("UPSCALE2X");
+    }
+
     auto shader = ShaderCompiler::instance().CompileFromFile(
-        "../../../src/core/shaders/spatial_gather.hlsl", "cs_6_3", "Gather");
+        "../../../src/core/shaders/spatial_gather.hlsl", "cs_6_3", "Gather", defines);
 
     sg_pipeline_state_ = dx12api().CreateComputePipelineState(shader, sg_root_signature_.Get());
 }
@@ -1111,12 +1153,19 @@ void RaytracingSystem::CalculateIndirectLighting(ID3D12Resource* scene,
                                                  uint32_t        output_indirect_descriptor_table,
                                                  const SettingsComponent& settings)
 {
-    auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  width                = render_system.window_width() >> 1;
-    auto  height               = render_system.window_height() >> 1;
-    auto  command_allocator    = render_system.current_frame_command_allocator();
-    auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
-    auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto  width         = render_system.window_width();
+    auto  height        = render_system.window_height();
+
+    if (options_.lowres_indirect)
+    {
+        width >>= 1;
+        height >>= 1;
+    }
+
+    auto command_allocator    = render_system.current_frame_command_allocator();
+    auto descriptor_heap      = render_system.current_frame_descriptor_heap();
+    auto timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
     auto [start_time_index, end_time_index] =
         render_system.AllocateTimestampQueryPair("RT Indirect diffuse");
 
@@ -1400,25 +1449,25 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
 
-        //constants.stride = 7;
-        //eaw_command_list_->SetComputeRoot32BitConstants(
-        //    EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        //eaw_command_list_->SetComputeRootDescriptorTable(
-        //    EAWDenoisingRootSignature::kOutput,
-        //    render_system.GetDescriptorHandleGPU(descriptor_table + 4));
-        //eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        //eaw_command_list_->ResourceBarrier(1,
-        //                                   &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
+        constants.stride = 7;
+        eaw_command_list_->SetComputeRoot32BitConstants(
+            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+        eaw_command_list_->SetComputeRootDescriptorTable(
+            EAWDenoisingRootSignature::kOutput,
+            render_system.GetDescriptorHandleGPU(descriptor_table + 4));
+        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+        eaw_command_list_->ResourceBarrier(1,
+                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
 
-        //constants.stride = 9;
-        //eaw_command_list_->SetComputeRoot32BitConstants(
-        //    EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        //eaw_command_list_->SetComputeRootDescriptorTable(
-        //    EAWDenoisingRootSignature::kOutput,
-        //    render_system.GetDescriptorHandleGPU(descriptor_table + 8));
-        //eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        //eaw_command_list_->ResourceBarrier(1,
-        //                                   &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
+        constants.stride = 9;
+        eaw_command_list_->SetComputeRoot32BitConstants(
+            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+        eaw_command_list_->SetComputeRootDescriptorTable(
+            EAWDenoisingRootSignature::kOutput,
+            render_system.GetDescriptorHandleGPU(descriptor_table + 8));
+        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+        eaw_command_list_->ResourceBarrier(1,
+                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
     }
     else
     {
@@ -1442,12 +1491,19 @@ void RaytracingSystem::SpatialGather(uint32_t                 descriptor_table,
                                      uint32_t                 blue_noise_descriptor_table,
                                      const SettingsComponent& settings)
 {
-    auto& render_system        = world().GetSystem<RenderSystem>();
-    auto  width                = render_system.window_width() >> 1;
-    auto  height               = render_system.window_height() >> 1;
-    auto  command_allocator    = render_system.current_frame_command_allocator();
-    auto  descriptor_heap      = render_system.current_frame_descriptor_heap();
-    auto  timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
+    auto& render_system = world().GetSystem<RenderSystem>();
+    auto  width         = render_system.window_width();
+    auto  height        = render_system.window_height();
+
+    if (options_.lowres_indirect)
+    {
+        width >>= 1;
+        height >>= 1;
+    }
+
+    auto command_allocator    = render_system.current_frame_command_allocator();
+    auto descriptor_heap      = render_system.current_frame_descriptor_heap();
+    auto timestamp_query_heap = render_system.current_frame_timestamp_query_heap();
     auto [start_time_index, end_time_index] =
         render_system.AllocateTimestampQueryPair("Spatial gather");
 

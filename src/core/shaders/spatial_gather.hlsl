@@ -38,12 +38,17 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
+#ifdef UPSCALE2X
     // We are interleaving in 2x2 fullres regions.
     uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
                             (g_constants.frame_count % 4) % 2);
 
     uint2 fullres_dims = uint2(g_constants.width, g_constants.height) << 1;
     uint2 fullres_center_xy = (gidx << 1) + sp_offset;
+#else
+    uint2 fullres_dims = uint2(g_constants.width, g_constants.height);
+    uint2 fullres_center_xy = gidx;
+#endif
 
     float3 filtered_color = 0.f;
     float total_weight = 0.f;
@@ -113,7 +118,11 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
                 continue;
             }
 
+#ifdef UPSCALE2X
             uint2 fullres_xy = (xy << 1) + sp_offset;
+#else
+            uint2 fullres_xy = xy;
+#endif
 
             float3 c = g_color[xy].xyz;
             float4 g = g_gbuffer.Load(int3(fullres_xy, 0));

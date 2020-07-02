@@ -287,22 +287,22 @@ float CalculateClosestDepth(in RWTexture2D<float4> gbuffer, in float2 xy, in flo
     // We need to look for closest depth.
     float closest_depth = gbuffer_data.w;
 
-    // for (int dx = -1; dx <= 1; ++dx)
-    //     for (int dy = -1; dy <= 1; ++dy)
-    //     {
-    //         int2 tap_xy = int2(xy) + int2(dx, dy);
+    for (int dx = -1; dx <= 1; ++dx)
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            int2 tap_xy = int2(xy) + int2(dx, dy);
 
-    //         if (tap_xy.x >= dims.x || tap_xy.y >= dims.y ||
-    //             tap_xy.x < 0 || tap_xy.y < 0)
-    //             continue;
+            if (tap_xy.x >= dims.x || tap_xy.y >= dims.y ||
+                tap_xy.x < 0 || tap_xy.y < 0)
+                continue;
 
-    //         float4 g = gbuffer.Load(int3(tap_xy, 0));
+            float4 g = gbuffer.Load(int3(tap_xy, 0));
 
-    //         if (g.w != 0.f && g.w < closest_depth)
-    //         {
-    //             closest_depth = g.w;
-    //         }
-    //     }
+            if (g.w != 0.f && g.w < closest_depth)
+            {
+                closest_depth = g.w;
+            }
+        }
 
     return closest_depth;
 }
@@ -323,17 +323,20 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
         return;
 
-    uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
-                            (g_constants.frame_count % 4) % 2);
-
     // Copy the rest of the history.
     float2 this_frame_xy = gidx;
 
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
-    // float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
-    float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
 
+#ifdef UPSCALE2X
+    uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
+                            (g_constants.frame_count % 4) % 2);
     uint2 this_pixel_offset = gidx % 2;
+    float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
+#else
+    float2 input_buffer_size = frame_buffer_size;
+#endif
+
 
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
@@ -345,8 +348,11 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     // Background.
     if (gbuffer_data.w < 1e-5f)
     {
-        // Output bicubic filtering in case of a disocclusion.
-        g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv, frame_buffer_size), 1.f);
+        g_output_color_history[int2(this_frame_xy)] = float4(SampleColorPoint(this_frame_uv, input_buffer_size), 1.f);
+#ifdef CALCULATE_VARIANCE
+        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
+        g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
+#endif
         return;
     }
 
@@ -360,17 +366,18 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     // Check if the fragment is outside of previous view frustum or this is first frame.
     bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0;
-                            ;
 
     if (disocclusion)
     {
         // In case of a disocclusion, do bilateral resampling for color
         // and estimate spatial luma moments, instead of temporal.
         float3 color = SampleColor(this_frame_uv, input_buffer_size);
-        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-
         g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
+
+#ifdef CALCULATE_VARIANCE
+        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
         g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
+#endif
     }
     else
     {
@@ -378,43 +385,30 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         float2 prev_frame_xy = UVtoXY(prev_frame_uv, frame_buffer_size);
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
 
-        // Perform velocity adjustment.
-        //float alpha = g_constants.alpha;
-        float velocity_adjustment = 0.f;//max(0.f, 1.f - 0.1f / speed);
-        float alpha = max(0.1f, g_constants.alpha - velocity_adjustment);
-
-        // Preserve history if this pixel does not have active samples evaluated in this frame.
-        // bool skip_pixel = !Interleave2x2(this_frame_xy, g_constants.frame_count);
-
-        // TODO: this feels as a bad heuristic, reiterate later.
         float current_closest_depth = CalculateClosestDepth(g_gbuffer, this_frame_xy, frame_buffer_size);
         float prev_closest_depth = CalculateClosestDepth(g_prev_gbuffer, prev_frame_xy, frame_buffer_size);
 
-        if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.05)
+        if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.5)
         {
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.
             float3 color = SampleColor(this_frame_uv, input_buffer_size);
-            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-
             g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
+
+#ifdef CALCULATE_VARIANCE
+            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
             g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
+#endif
             return;
         }
 
+        float alpha = g_constants.alpha;
+
         // Fetch history and moments history.
         float3 history = SampleHistory(prev_frame_uv, frame_buffer_size);
-        float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
-        float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-        uint history_length = GetHistoryLength(prev_frame_uv, frame_buffer_size);
-
-
         // Prepare current frame data.
         float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
-        float luma = luminance(color);
-
-        // float2 m = lerp(luma_moments_spatial, float2(luma, luma * luma), min(1, history_length / 16));
-        float4 moment = float4(luma, luma * luma, 0.f, 1.f);
+        uint history_length = GetHistoryLength(prev_frame_uv, frame_buffer_size);
 
         if (history_length < kMaxHistoryLength)
         {
@@ -422,17 +416,24 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
             alpha = min(alpha, 1.f - t);
         }
 
+#ifdef UPSCALE2X
         if (any(this_pixel_offset != sp_offset))
         {
             alpha = 1.f;
             history_length -= 1;
         }
-
-        // if (skip_pixel) alpha = 1.f;
+#endif
 
         // Perform history blend.
         g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), history_length + 1);
+
+#ifdef CALCULATE_VARIANCE
+        float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
+        float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
+        float luma = luminance(color);
+        float4 moment = float4(luma, luma * luma, 0.f, 1.f);
         g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, alpha);
+#endif
     }
 }
 
@@ -528,8 +529,9 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
         if (!is_static)
         {
             float velocity_adjustment = max(velocity / 8.f, 1.f);
-            alpha = 0.98f - velocity_adjustment * 0.15f;
-            color_aabb_scale = 5.f - velocity_adjustment * 4.f;
+            //alpha = 0.98f - velocity_adjustment * 0.12f;
+            color_aabb_scale = 0.75f;
+            alpha = 0.6f;
         }
         else
         {

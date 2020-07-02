@@ -115,7 +115,12 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
     float3 center_color = SampleColorRemoveFireflies(gidx);
+    
+#ifdef USE_VARIANCE
     float center_variance = RasampleVariance(gidx, resolve_moments);
+#else
+    float center_variance = 0.f;
+#endif
 
     // Handle background.
     if (center_d < 1e-5f)
@@ -152,18 +157,27 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             }
 
             // Calculate luma weight.
-            float luma_weight = 1.f;//CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
+#ifdef USE_VARIANCE
+            float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
-            float h_weight = 1.f;// kWeights[abs(dx)] * kWeights[abs(dy)];
+            float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
+#else
+            float luma_weight = 1.f;
+            // Calculate EAW weight.
+            float h_weight = 1.f;
+#endif
+
             // Сalculate depth and normal weight
             float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;
-            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
-
             total_weight += weight * h_weight * luma_weight;
+
+#ifdef USE_VARIANCE
             total_variance_weight += h_weight * h_weight * weight * weight * luma_weight * luma_weight;
+            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
+#endif
         }
     }
 
