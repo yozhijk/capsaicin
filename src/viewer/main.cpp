@@ -85,7 +85,7 @@ int main()
 
             RenderSessionParams params {hwnd};
             InitRenderSession(&params);
-            LoadSceneFromOBJ("../../../assets/exterior.obj");
+            LoadSceneFromOBJ("../../../assets/rungholt.obj");
             // LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);
