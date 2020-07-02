@@ -152,9 +152,9 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             }
 
             // Calculate luma weight.
-            float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
+            float luma_weight = 1.f;//CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
-            float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
+            float h_weight = 1.f;// kWeights[abs(dx)] * kWeights[abs(dy)];
             // Сalculate depth and normal weight
             float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
 

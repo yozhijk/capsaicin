@@ -326,20 +326,29 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
                             (g_constants.frame_count % 4) % 2);
 
-
-
     // Copy the rest of the history.
     float2 this_frame_xy = gidx;
+
     float2 frame_buffer_size = float2(g_constants.width, g_constants.height);
     // float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
     float2 input_buffer_size = float2(g_constants.width >> 1, g_constants.height >> 1);
 
     uint2 this_pixel_offset = gidx % 2;
 
-
     // Calculate UV coordinates for this frame.
     float2 subsample_location = 0.5f;
     float2 this_frame_uv = (this_frame_xy + subsample_location) / frame_buffer_size;
+    
+    // Fetch GBuffer data.
+    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
+
+    // Background.
+    if (gbuffer_data.w < 1e-5f)
+    {
+        // Output bicubic filtering in case of a disocclusion.
+        g_output_color_history[int2(this_frame_xy)] = float4(SampleColor(this_frame_uv, frame_buffer_size), 1.f);
+        return;
+    }
 
     // Reconstruct hit point using depth buffer from the current frame.
     float3 hit_position = ReconstructWorldPosition(this_frame_uv, frame_buffer_size);
@@ -348,12 +357,10 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
     float speed = 0;//length(prev_frame_uv - this_frame_uv);
 
-    // Fetch GBuffer data.
-    float4 gbuffer_data = g_gbuffer.Load(int3(this_frame_xy, 0));
 
     // Check if the fragment is outside of previous view frustum or this is first frame.
-    bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0 ||
-                            gbuffer_data.w < 1e-5f;
+    bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f) || g_constants.frame_count == 0;
+                            ;
 
     if (disocclusion)
     {
@@ -388,7 +395,6 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.
             float3 color = SampleColor(this_frame_uv, input_buffer_size);
-
             float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
 
             g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
@@ -404,9 +410,8 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
 
         // Prepare current frame data.
-        float3 color = SampleColor(this_frame_uv, input_buffer_size);
+        float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
         float luma = luminance(color);
-
 
         // float2 m = lerp(luma_moments_spatial, float2(luma, luma * luma), min(1, history_length / 16));
         float4 moment = float4(luma, luma * luma, 0.f, 1.f);
@@ -420,6 +425,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         if (any(this_pixel_offset != sp_offset))
         {
             alpha = 1.f;
+            history_length -= 1;
         }
 
         // if (skip_pixel) alpha = 1.f;

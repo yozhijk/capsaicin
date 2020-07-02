@@ -1400,25 +1400,25 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
 
-        constants.stride = 7;
-        eaw_command_list_->SetComputeRoot32BitConstants(
-            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        eaw_command_list_->SetComputeRootDescriptorTable(
-            EAWDenoisingRootSignature::kOutput,
-            render_system.GetDescriptorHandleGPU(descriptor_table + 4));
-        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        eaw_command_list_->ResourceBarrier(1,
-                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
+        //constants.stride = 7;
+        //eaw_command_list_->SetComputeRoot32BitConstants(
+        //    EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+        //eaw_command_list_->SetComputeRootDescriptorTable(
+        //    EAWDenoisingRootSignature::kOutput,
+        //    render_system.GetDescriptorHandleGPU(descriptor_table + 4));
+        //eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+        //eaw_command_list_->ResourceBarrier(1,
+        //                                   &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
 
-        constants.stride = 9;
-        eaw_command_list_->SetComputeRoot32BitConstants(
-            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        eaw_command_list_->SetComputeRootDescriptorTable(
-            EAWDenoisingRootSignature::kOutput,
-            render_system.GetDescriptorHandleGPU(descriptor_table + 8));
-        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        eaw_command_list_->ResourceBarrier(1,
-                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
+        //constants.stride = 9;
+        //eaw_command_list_->SetComputeRoot32BitConstants(
+        //    EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+        //eaw_command_list_->SetComputeRootDescriptorTable(
+        //    EAWDenoisingRootSignature::kOutput,
+        //    render_system.GetDescriptorHandleGPU(descriptor_table + 8));
+        //eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+        //eaw_command_list_->ResourceBarrier(1,
+        //                                   &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
     }
     else
     {
