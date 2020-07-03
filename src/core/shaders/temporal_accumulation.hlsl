@@ -28,56 +28,31 @@ RWTexture2D<float4> g_prev_gbuffer : register(u4);
 RWTexture2D<float4> g_output_color_history : register(u5);
 RWTexture2D<float4> g_output_moments_history : register(u6);
 
+#include "utils.h"
 #include "camera.h"
 #include "sampling.h"
 #include "color_space.h"
 #include "math_functions.h"
 #include "aabb.h"
 
-float2 UVtoXY(in float2 uv, in uint2 dim)
-{
-    float2 xy = uv * float2(dim);
-    xy = min(xy, float2(dim.x - 1, dim.y - 1));
-    return xy;
-}
-
-float2 XYtoUV(in float2 xy, in uint2 dim)
-{
-    return clamp(xy / float2(dim), 0.f, 1.f);
-}
-
-float3 SampleBilinear(in RWTexture2D<float4> texture, in float2 uv, in uint2 dim)
+// Sample texture with bilinear filtering.
+float3 SampleBilinear(in RWTexture2D<float4> texture,
+                      in float2 uv,
+                      in uint2 dim)
 {
     float2 xy = UVtoXY(uv, dim) - 0.5f;
     uint2 uxy = uint2(floor(xy));
-    float2 w = frac(xy);
 
-    float3 v00 = texture[uxy].xyz;
-    float3 v01 = texture[uxy + uint2(0, 1)];
-    float3 v10 = texture[uxy + uint2(1, 0)];
-    float3 v11 = texture[uxy + uint2(1, 1)];
+    float2 w    = frac(xy);
+    float3 v00  = texture[uxy].xyz;
+    float3 v01  = texture[uxy + uint2(0, 1)];
+    float3 v10  = texture[uxy + uint2(1, 0)];
+    float3 v11  = texture[uxy + uint2(1, 1)];
 
-    return lerp(lerp(v00, v10, w.x), lerp(v01, v11, w.x), w.y);
+    return lerp(lerp(v00, v10, w.x),
+                lerp(v01, v11, w.x), w.y);
 }
 
-float3 ReconstructWorldPosition(in float2 uv, in uint2 dims)
-{
-    uint2 frame_buffer_size = dims;
-
-    // Transform into [-0.5, 0.5]
-    float2 h_sample = uv - float2(0.5f, 0.5f);
-    // Transform into [-dim/2, dim/2]
-    float2 c_sample = h_sample * g_camera.sensor_size;
-
-    // Calculate direction to image plane
-    float3 d = normalize(g_camera.focal_length * g_camera.forward + c_sample.x * g_camera.right + c_sample.y * g_camera.up);
-    // Origin == camera position + nearz * d
-    float3 o = g_camera.position;
-
-    float t = g_gbuffer.Load(int3(UVtoXY(uv, frame_buffer_size), 0)).w;
-
-    return o + t * d;
-}
 
 float cubic(in float x, in float b, in float c)
 {
@@ -261,13 +236,6 @@ float2 CalculateLumaMomentsSpatial(in float2 uv, in uint2 dim)
         // GBuffer data at current pixel.
         float4 g = g_gbuffer.Load(int3(sxy, 0));
 
-        // TODO: reiterate on GBuffer culling later.
-        // if (g.z != gc.z || g.w < 1e-5f ||
-        //     abs(g.w - gc.w) / gc.w > 0.05f)
-        // {
-        //     continue;
-        // }
-
         // Calculate pixel luminance.
         float v = luminance(SampleColor(XYtoUV(float2(sxy), dim), dim));
 
@@ -357,7 +325,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     }
 
     // Reconstruct hit point using depth buffer from the current frame.
-    float3 hit_position = ReconstructWorldPosition(this_frame_uv, frame_buffer_size);
+    float3 hit_position = ReconstructWorldPosition(this_frame_uv, gbuffer_data.w, frame_buffer_size);
 
     // Reconstruct previous frame UV.
     float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
@@ -437,37 +405,37 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     }
 }
 
-float2 DilatedVelocityXY(in float2 xy)
-{
-    // Fetch GBuffer data.
-    float4 gbuffer_data = g_gbuffer.Load(int3(xy, 0));
+// float2 DilatedVelocityXY(in float2 xy)
+// {
+//     // Fetch GBuffer data.
+//     float4 gbuffer_data = g_gbuffer.Load(int3(xy, 0));
 
-    // We need to look for closest depth.
-    float closest_depth = gbuffer_data.w;
-    int cx = 0;
-    int cy = 0;
+//     // We need to look for closest depth.
+//     float closest_depth = gbuffer_data.w;
+//     int cx = 0;
+//     int cy = 0;
 
-    for (int dx = -1; dx <= 1; ++dx)
-        for (int dy = -1; dy <= 1; ++dy)
-        {
-            int2 tap_xy = int2(xy) + int2(dx, dy);
+//     for (int dx = -1; dx <= 1; ++dx)
+//         for (int dy = -1; dy <= 1; ++dy)
+//         {
+//             int2 tap_xy = int2(xy) + int2(dx, dy);
 
-            if (tap_xy.x >= g_constants.width || tap_xy.y >= g_constants.height ||
-                tap_xy.x < 0 || tap_xy.y < 0)
-                continue;
+//             if (tap_xy.x >= g_constants.width || tap_xy.y >= g_constants.height ||
+//                 tap_xy.x < 0 || tap_xy.y < 0)
+//                 continue;
 
-            float4 g = g_gbuffer.Load(int3(tap_xy, 0));
+//             float4 g = g_gbuffer.Load(int3(tap_xy, 0));
 
-            if (g.w != 0.f && g.w < closest_depth)
-            {
-                closest_depth = g.w;
-                cx = dx;
-                cy = dy;
-            }
-        }
+//             if (g.w != 0.f && g.w < closest_depth)
+//             {
+//                 closest_depth = g.w;
+//                 cx = dx;
+//                 cy = dy;
+//             }
+//         }
 
-    return xy + float2(cx, cy);
-}
+//     return xy + float2(cx, cy);
+// }
 
 // Traditional TAA kernel with some optimizations described in 
 // "A Survey of Temporal Antialiasing Techniques" Eurographics 2020, Lei Yang, Shiqiu Liu, Marco Salvi
@@ -498,7 +466,7 @@ void TAA(in uint2 gidx: SV_DispatchThreadID,
     }
 
     // Reconstruct hit point using depth buffer from the current frame.
-    float3 hit_position = ReconstructWorldPosition(this_frame_uv, frame_buffer_size);
+    float3 hit_position = ReconstructWorldPosition(this_frame_uv, gbuffer_data.w, frame_buffer_size);
     // Reconstruct previous frame UV.
     float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, hit_position);
     // Velocity in pixels.
