@@ -57,4 +57,23 @@ float3 OctDecode(float2 f)
     return normalize(n);
 }
 
+float cubic(in float x, in float b, in float c)
+{
+    float y  = 0.0;
+    float x2 = x * x;
+    float x3 = x * x * x;
+
+    if (x < 1.0)
+    {
+        y = (12.0 - 9.0 * b - 6.0 * c) * x3 + (-18.0 + 12.0 * b + 6.0 * c) * x2 + (6.0 - 2.0 * b);
+    }
+    else if (x <= 2.0)
+    {
+        y = (-b - 6.0 * c) * x3 + (6.0 * b + 30.0 * c) * x2 + (-12.0 * b - 48.0 * c) * x +
+            (8.0 * b + 24.0 * c);
+    }
+
+    return y / 6.0;
+}
+
 #endif

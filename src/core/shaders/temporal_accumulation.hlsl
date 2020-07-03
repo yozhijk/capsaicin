@@ -35,43 +35,6 @@ RWTexture2D<float4> g_output_moments_history : register(u6);
 #include "math_functions.h"
 #include "aabb.h"
 
-// Sample texture with bilinear filtering.
-float3 SampleBilinear(in RWTexture2D<float4> texture,
-                      in float2 uv,
-                      in uint2 dim)
-{
-    float2 xy = UVtoXY(uv, dim) - 0.5f;
-    uint2 uxy = uint2(floor(xy));
-
-    float2 w    = frac(xy);
-    float3 v00  = texture[uxy].xyz;
-    float3 v01  = texture[uxy + uint2(0, 1)];
-    float3 v10  = texture[uxy + uint2(1, 0)];
-    float3 v11  = texture[uxy + uint2(1, 1)];
-
-    return lerp(lerp(v00, v10, w.x),
-                lerp(v01, v11, w.x), w.y);
-}
-
-
-float cubic(in float x, in float b, in float c)
-{
-    float y = 0.0;
-    float x2 = x * x;
-    float x3 = x * x * x;
-
-    if (x < 1.0)
-    {
-        y = (12.0 - 9.0 * b - 6.0 * c) * x3 + (-18.0 + 12.0 * b + 6.0 * c) * x2 + (6.0 - 2.0 * b);
-    }
-    else if (x <= 2.0)
-    {
-        y = (-b - 6.0 * c) * x3 + (6.0 * b + 30.0 * c) * x2 + (-12.0 * b - 48.0 * c) * x + (8.0 * b + 24.0 * c);
-    }
-
-    return y / 6.0;
-}
-
 // Resampling function is using blue-noise sample positions from previous frame.
 float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv, in uint2 dim)
 {
