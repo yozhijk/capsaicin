@@ -20,6 +20,7 @@ struct RayPayload
 
 ConstantBuffer<Constants> g_constants : register(b0);
 ConstantBuffer<Camera> g_camera : register(b1);
+ConstantBuffer<Camera> g_prev_camera : register(b2);
 RaytracingAccelerationStructure g_scene : register(t0);
 Texture2D<float4> g_blue_noise : register(t1);
 SamplerState g_sampler : register(s0);
@@ -31,7 +32,8 @@ RWBuffer<float2> g_texcoord_buffer : register(u3);
 RWStructuredBuffer<Mesh> g_mesh_buffer : register(u4);
 RWTexture2D<float4> g_gbuffer_geo : register(u5);
 RWTexture2D<float4> g_color_history : register(u6);
-RWTexture2D<float4> g_output_indirect : register(u7);
+RWTexture2D<float4> g_prev_gbuffer_normal_depth : register(u7);
+RWTexture2D<float4> g_output_indirect : register(u8);
 
 #include "lighting.h"
 #include "math_functions.h"
@@ -43,14 +45,28 @@ RWTexture2D<float4> g_output_indirect : register(u7);
 [shader("raygeneration")]
 void CalculateIndirectDiffuseLighting()
 {
+    // These are half-res indices.
     uint2 xy = DispatchRaysIndex();
     uint2 dims = DispatchRaysDimensions();
 
+
+#ifdef LOWRES_INDIRECT
+    // We are interleaving in 2x2 fullres regions.
+    uint2 sp_offset = uint2((g_constants.frame_count % 4) / 2,
+                            (g_constants.frame_count % 4) % 2);
+
+    uint2 fullres_dims = dims << 1;
+    uint2 fullres_xy = (xy << 1) + sp_offset;
+#else
+    uint2 fullres_dims = dims;
+    uint2 fullres_xy = xy;
+#endif
+
     // Reconstruct primary ray to determine backface hits.
-    RayDesc ray = CreatePrimaryRay(xy, dims);
+    RayDesc ray = CreatePrimaryRay(fullres_xy, fullres_dims);
 
     // Load GBuffer information and decode.
-    float4 g            = g_gbuffer_geo[xy];
+    float4 g            = g_gbuffer_geo[fullres_xy];
     float2 uv           = g.xy;
     uint instance_index = asuint(g.z);
     uint prim_index     = asuint(g.w);
@@ -86,9 +102,6 @@ void CalculateIndirectDiffuseLighting()
         float2 tx;
         InterpolateAttributes(payload.instance_index, payload.prim_index, payload.uv, p, n, tx);
 
-        // If this point already present in history - return shaded result.
-        
-
         float3 kd = GetMaterial(payload.instance_index, tx);
 
         // If no contribution possible, bail out.
@@ -100,13 +113,40 @@ void CalculateIndirectDiffuseLighting()
         // Add lighting.
         if (bounce != 0)
         {
-            // In this config shadow hitgoup is the second one after indirect hit, so index 1.
-            const uint shadow_hitgroup_index = 1;
-            color += throughput * CalculateDirectIllumination(p, n, kd, shadow_hitgroup_index);
+            // GBuffer feedback reads shaded results from previous frame GBuffer if available,
+            // essentially achieving multiple bounces at the cost of one.
+#ifdef GBUFFER_FEEDBACK
+            // If this point already present in history - return shaded result.
+            float2 prev_frame_uv = CalculateImagePlaneUV(g_prev_camera, p);
+            bool disocclusion = any(prev_frame_uv < 0.f) || any(prev_frame_uv > 1.f);
+
+            float2 prev_frame_xy = UVtoXY(prev_frame_uv, fullres_dims);
+            float4 prev_gbuffer_data = g_prev_gbuffer_normal_depth.Load(int3(prev_frame_xy, 0));
+
+            // Calculate depth from previous frame camera.
+            float current_depth = length(p - g_prev_camera.position);
+            float prev_depth = prev_gbuffer_data.w;
+
+            disocclusion = disocclusion || (abs(prev_depth - current_depth) / current_depth > 0.05);
+            if (disocclusion)
+            {
+#endif
+                // In this config shadow hitgoup is the second one after indirect hit, so index 1.
+                const uint shadow_hitgroup_index = 1;
+                color += throughput * CalculateDirectIllumination(p, n, kd, shadow_hitgroup_index);
+#ifdef GBUFFER_FEEDBACK
+            }
+            else
+            {
+                // Fetch history color.
+                color += throughput * SampleBilinear(g_color_history, prev_frame_uv, fullres_dims);
+                break;
+            }
+#endif
         }
 
         // Generate random sample for BRDF sampling.
-        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, xy, g_constants.frame_count * 25 + bounce);
+        float2 s = Sample2D_BlueNoise4x4(g_blue_noise, fullres_xy, g_constants.frame_count * 25 + bounce);
 
         // Sample Lambertian BRDF.
         BrdfSample ss = Lambert_Sample(s, n);

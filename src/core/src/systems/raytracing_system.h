@@ -19,12 +19,19 @@ struct GPUSceneData
     ID3D12Resource* mesh_desc_buffer;
 };
 
+struct RaytracingOptions
+{
+    bool lowres_indirect  = true;
+    bool use_variance     = false;
+    bool gbuffer_feedback = true;
+};
+
 struct SettingsComponent;
 
 class RaytracingSystem : public System
 {
 public:
-    RaytracingSystem();
+    RaytracingSystem(const RaytracingOptions& options = RaytracingOptions{});
     ~RaytracingSystem();
 
     void Run(ComponentAccess& access, EntityQuery& entity_query, tf::Subflow& subflow) override;
@@ -60,14 +67,16 @@ private:
                                  uint32_t        output_direct_descriptor_table,
                                  uint32_t        output_normal_depth_albedo);
 
-    void CalculateIndirectLighting(ID3D12Resource* scene,
-                                   ID3D12Resource* camera,
-                                   uint32_t        scene_data_descriptor_table,
-                                   uint32_t        scene_textures_descriptor_table,
-                                   uint32_t        internal_descriptor_table,
-                                   uint32_t        gbuffer_descriptor_table,
-                                   uint32_t        indirect_history_descriptor_table,
-                                   uint32_t        output_indirect_descriptor_table,
+    void CalculateIndirectLighting(ID3D12Resource*          scene,
+                                   ID3D12Resource*          camera,
+                                   ID3D12Resource*          prev_camera,
+                                   uint32_t                 scene_data_descriptor_table,
+                                   uint32_t                 scene_textures_descriptor_table,
+                                   uint32_t                 internal_descriptor_table,
+                                   uint32_t                 gbuffer_descriptor_table,
+                                   uint32_t                 indirect_history_descriptor_table,
+                                   uint32_t                 prev_gbuffer_descriptor_table,
+                                   uint32_t                 output_indirect_descriptor_table,
                                    const SettingsComponent& settings);
 
     void IntegrateTemporally(ID3D12Resource*          camera,
@@ -88,7 +97,9 @@ private:
 
     void Denoise(uint32_t descriptor_table, const SettingsComponent& settings);
 
-    void SpatialGather(uint32_t descriptor_table, uint32_t blue_noise_descriptor_table, const SettingsComponent& settings);
+    void SpatialGather(uint32_t                 descriptor_table,
+                       uint32_t                 blue_noise_descriptor_table,
+                       const SettingsComponent& settings);
 
     uint32_t PopulateSceneDataDescriptorTable(GPUSceneData& scene_data);
     uint32_t PopulateOutputIndirectDescriptorTable();
@@ -105,6 +116,7 @@ private:
     uint32_t PopulateGBufferDescriptorTable();
     uint32_t PopulateOutputDirectDescriptorTable();
     uint32_t PopulateOutputNormalDepthAlbedo();
+    uint32_t PopulatePrevGBufferDescriptorTable();
 
     ComPtr<ID3D12GraphicsCommandList> upload_command_list_       = nullptr;
     ComPtr<ID3D12GraphicsCommandList> rt_indirect_command_list_  = nullptr;
@@ -171,5 +183,7 @@ private:
     ComPtr<ID3D12Resource> gbuffer_albedo_            = nullptr;
     ComPtr<ID3D12Resource> gbuffer_geo_               = nullptr;
     ComPtr<ID3D12Resource> prev_gbuffer_normal_depth_ = nullptr;
+
+    RaytracingOptions options_;
 };
 }  // namespace capsaicin

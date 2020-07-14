@@ -54,7 +54,7 @@ float3 GetMaterial(in uint instance_index, in float2 tx)
     Mesh mesh = g_mesh_buffer[instance_index];
     tx.y = 1.f - tx.y;
     float3 kd = (mesh.texture_index == INVALID_ID)
-                ? 1.f
+                ? 0.75f
                 : g_textures[NonUniformResourceIndex(mesh.texture_index)].SampleLevel(g_sampler, tx, 0);
     kd = pow(kd, 2.2f);
     return kd;
