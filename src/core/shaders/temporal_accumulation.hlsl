@@ -319,7 +319,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         float current_closest_depth = CalculateClosestDepth(g_gbuffer, this_frame_xy, frame_buffer_size);
         float prev_closest_depth = CalculateClosestDepth(g_prev_gbuffer, prev_frame_xy, frame_buffer_size);
 
-        if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.05)
+        if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.05  )
         {
             // In case of a disocclusion, do bilateral resampling for color
             // and estimate spatial luma moments, instead of temporal.

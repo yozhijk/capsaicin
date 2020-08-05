@@ -50,8 +50,8 @@ LRESULT __stdcall WndProc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 int main()
 {
     constexpr const char*   kWindowClassName = "Viewer";
-    constexpr std::uint32_t kWindowWidth     = 800;
-    constexpr std::uint32_t kWindowHeight    = 600;
+    constexpr std::uint32_t kWindowWidth     = 1920;
+    constexpr std::uint32_t kWindowHeight    = 1080;
 
     WNDCLASSEX window_class{};
     window_class.cbSize        = sizeof(WNDCLASSEX);
@@ -85,7 +85,7 @@ int main()
 
             RenderSessionParams params {hwnd};
             InitRenderSession(&params);
-            LoadSceneFromOBJ("../../../assets/sponza.obj");
+            LoadSceneFromOBJ("../../../assets/rungholt.obj");
             //LoadSceneFromOBJ("../../../assets/ScifiEnv.obj");
 
             ShowWindow(hwnd, SW_SHOWDEFAULT);

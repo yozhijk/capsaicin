@@ -26,7 +26,7 @@ float CalculateNormalWeight(float3 n0, float3 n1)
 
 float CalculateDepthWeight(float d0, float d1)
 {
-    const float kDepthSigma = 3.f;
+    const float kDepthSigma = 1.f;
     return Gaussian(abs(d0 - d1), 0.f, kDepthSigma);
 }
 
