@@ -24,13 +24,14 @@ struct SettingsComponent
     bool gather  = true;
 
     float normal_sigma = 128.f;
-    float depth_sigma  = 0.01f;
-    float luma_sigma   = 1.f;
+    float depth_sigma  = 2.f;
+    float luma_sigma   = 1.5f;
 
-    float temporal_upscale_feedback = 0.95f;
+    float temporal_upscale_feedback = 0.975f;
     float taa_feedback              = 0.9f;
 
     int output = kCombined;
+    int num_diffuse_bounces = 1u;
 };
 
 class GUISystem : public System

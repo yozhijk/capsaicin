@@ -1,22 +1,9 @@
+// clang-format off
 #ifndef CAMERA_H
 #define CAMERA_H
 
-struct Camera
-{
-    float3 position;
-    float focal_length;
-
-    float3 right;
-    float znear;
-
-    float3 forward;
-    float focus_distance;
-
-    float3 up;
-    float aperture;
-
-    float2 sensor_size;
-};
+#include "utils.h"
+#include "sampling.h"
 
 float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
 {
@@ -33,19 +20,64 @@ float2 CalculateImagePlaneUV(in Camera camera, in float3 position)
     float3 n = normalize(camera.forward);
     float3 p = o + n * camera.focal_length;
 
-    if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
+    //if (abs(dot(n, d)) < 1e-5f) return float2(-1000.f, -1000.f);
 
     // Intersection distance to an image plane.
     float t = dot(n, p - o) / dot(n, d);
 
-    if (t <= 0.f) return float2(-1000.f, -1000.f);
+    // if (t <= 0.f) return float2(-1000.f, -1000.f);
 
     float3 ip = o + t * d;
     float3 ipd = (ip - p);
 
     float u = dot(camera.right, ipd) / (0.5f * camera.sensor_size.x);
     float v = dot(camera.up, ipd) / (0.5f * camera.sensor_size.y);
+
     return 0.5f * float2(u, v) + 0.5f;
 }
 
+RayDesc CreatePrimaryRay(in uint2 xy, in uint2 dim)
+{
+    // float2 s = Sample2D_BlueNoise4x4Stable(g_blue_noise, xy, g_constants.frame_count);
+    float2 s = Sample2D_Halton23(g_constants.frame_count);
+
+    // Calculate [0..1] image plane sample
+    float2 img_sample = (float2(xy) + s) / float2(dim);
+
+    // Transform into [-0.5, 0.5]
+    float2 h_sample = img_sample - float2(0.5f, 0.5f);
+    // Transform into [-dim/2, dim/2]
+    float2 c_sample = h_sample * g_camera.sensor_size;
+
+    RayDesc my_ray;
+    // Calculate direction to image plane
+    my_ray.Direction = normalize(g_camera.focal_length * g_camera.forward +
+                                 c_sample.x * g_camera.right +
+                                 c_sample.y * g_camera.up);
+
+    // Origin == camera position + nearz * d
+    my_ray.Origin = g_camera.position;
+    my_ray.TMin = 0.0f;
+    my_ray.TMax = 1e6f;
+    return my_ray;
+}
+
+float3 ReconstructWorldPosition(in float2 uv, in float depth, in uint2 dims)
+{
+    uint2 frame_buffer_size = dims;
+
+    // Transform into [-0.5, 0.5]
+    float2 h_sample = uv - float2(0.5f, 0.5f);
+    // Transform into [-dim/2, dim/2]
+    float2 c_sample = h_sample * g_camera.sensor_size;
+
+    // Calculate direction to image plane.
+    float3 d = normalize(g_camera.focal_length * g_camera.forward +
+                         c_sample.x * g_camera.right +
+                         c_sample.y * g_camera.up);
+
+    return g_camera.position + depth * d;
+}
+
 #endif // CAMERA_H
+// clang-format on
