@@ -360,7 +360,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
 #ifdef CALCULATE_VARIANCE
         float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
-        float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
+        // float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
         float luma = luminance(color);
         float4 moment = float4(luma, luma * luma, 0.f, 1.f);
         g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, alpha);
