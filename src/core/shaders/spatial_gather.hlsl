@@ -24,10 +24,16 @@ float CalculateNormalWeight(float3 n0, float3 n1)
     return pow(max(dot(n0, n1), 0.0), kNormalSigma);
 }
 
-float CalculateDepthWeight(float d0, float d1)
+float CalculateDepthWeight(float dc, float dp, float alpha)
 {
-    const float kDepthSigma = 3.f;
-    return Gaussian(abs(d0 - d1), 0.f, kDepthSigma);
+    float t = alpha == 0.f ? 0.0f : (abs(dc - dp) / alpha);
+    return exp(-t);
+}
+
+float CalculateLumaWeight(float lc, float lp, float alpha)
+{
+    float v = abs(lc - lp) / alpha;
+    return exp(-v);
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
@@ -57,13 +63,15 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
     float3 center_color = g_color[gidx].xyz;
-
+    
     // Handle background.
     if (center_d < 1e-5f)
     {
         g_output_color[gidx] = float4(center_color, 0.f);
         return;
     }
+
+    const float alpha_depth = center_d;
 
     // const uint kNumSamples = 16;
     // const uint kScale = 32;
@@ -135,8 +143,8 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
                 continue;
             }
 
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d);
-
+            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d, alpha_depth * length(float2(dx, dy)))
+             * CalculateLumaWeight(luminance(center_color), luminance(c), 2.f);
             filtered_color += weight * c;
             total_weight += weight;
         }

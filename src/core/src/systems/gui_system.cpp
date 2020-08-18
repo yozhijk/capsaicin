@@ -74,7 +74,7 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     ImGui::Separator();
     ImGui::Checkbox("Enable SVGF", &settings.denoise);
     ImGui::SliderFloat("Normal sigma", &settings.normal_sigma, 32.f, 256.f);
-    ImGui::SliderFloat("Depth sigma", &settings.depth_sigma, 0.1f, 10.f);
+    ImGui::SliderFloat("Depth sigma", &settings.depth_sigma, 0.1f, 2.f);
     ImGui::SliderFloat("Luminance sigma", &settings.luma_sigma, 0.1f, 5.f);
     ImGui::Separator();
     ImGui::Checkbox("Enable spatial gather", &settings.gather);

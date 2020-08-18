@@ -359,11 +359,20 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), history_length + 1);
 
 #ifdef CALCULATE_VARIANCE
-        float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
-        // float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-        float luma = luminance(color);
-        float4 moment = float4(luma, luma * luma, 0.f, 1.f);
-        g_output_moments_history[int2(this_frame_xy)] = lerp(moment, moments_history, alpha);
+        if (history_length > 8)
+        {
+            float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
+            // float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
+            float luma = luminance(color);
+            float4 moment = float4(luma, luma * luma, 0.f, 1.f);
+            g_output_moments_history[int2(this_frame_xy)] = float4(lerp(moment, moments_history, alpha).xyz, history_length + 1);
+        }
+        else
+        {
+            float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
+            float2 moment = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
+            g_output_moments_history[int2(this_frame_xy)] = float4(lerp(moment, moments_history.xy, alpha), 0.f, history_length + 1);
+        }
 #endif
     }
 }

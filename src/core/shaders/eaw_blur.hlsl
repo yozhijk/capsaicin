@@ -27,15 +27,15 @@ float CalculateNormalWeight(float3 n0, float3 n1)
     return pow(max(dot(n0, n1), 0.0), g_constants.normal_sigma);
 }
 
-float CalculateDepthWeight(float d0, float d1)
+float CalculateDepthWeight(float dc, float dp, float alpha)
 {
-    float v = abs(d0 - d1) / (g_constants.depth_sigma * g_constants.depth_sigma);
-    return exp(-0.5f * v);
+    float t = alpha == 0.f ? 0.0f : (abs(dc - dp) / alpha);
+    return exp(-t);
 }
 
-float CalculateLumaWeight(float l0, float l1, float var)
+float CalculateLumaWeight(float lc, float lp, float var)
 {
-    float v = abs(l0 - l1) / ((g_constants.luma_sigma * sqrt(max(0.f, var))) + 1e-5);
+    float v = abs(lc - lp) / (g_constants.luma_sigma * sqrt(max(0.f, var + 1e-10f)));
     return exp(-v);
 }
 
@@ -47,7 +47,10 @@ float SampleVariance(in uint2 xy, bool resolve)
     if (resolve)
     {
         float4 moments = g_moments[xy];
-        return abs(moments.y - moments.x * moments.x);
+
+        // Variance boost.
+        float boost = max(1.f, 16.f / moments.w);
+        return boost * abs(moments.y - moments.x * moments.x);
     }
     else
     {
@@ -58,11 +61,13 @@ float SampleVariance(in uint2 xy, bool resolve)
 // Resample variance using 3x3 Gaussian kernel as per SVGF paper.
 float RasampleVariance(in uint2 xy, bool resolve)
 {
-    const float kVarianceSigma = 2.f;
-
     float filtered_variance = 0.f;
     float total_weight = 0.f;
-    float center_variance = SampleVariance(xy, resolve);
+
+    const float kWeights[2][2] = {
+        { 1.0 / 4.0, 1.0 / 8.0  },
+        { 1.0 / 8.0, 1.0 / 16.0 }
+    };
 
     const int kRadius = 1;
     for (int dy = -kRadius; dy <= kRadius; ++dy)
@@ -77,7 +82,7 @@ float RasampleVariance(in uint2 xy, bool resolve)
             }
 
             float variance = SampleVariance(sxy, resolve);
-            float weight = Gaussian(center_variance, variance, kVarianceSigma);
+            float weight = kWeights[abs(dx)][abs(dy)];
 
             filtered_variance += weight * variance;
             total_weight += weight;
@@ -89,7 +94,7 @@ float RasampleVariance(in uint2 xy, bool resolve)
 
 float3 SampleColorRemoveFireflies(in uint2 xy)
 {
-    return min(g_color[xy].xyz, 1.f);
+    return min(g_color[xy].xyz, 10.f);
 }
 
 // Edge-avoding a-trous wavelet blur with edge stoping functions, part of
@@ -105,6 +110,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
     // TODO: remove this dirty hack.
     bool resolve_moments = g_constants.stride == 1;
+    float history_length = g_moments[gidx].w;
 
     float3 filtered_color = 0.f;
     float filtered_variance = 0.f;
@@ -131,6 +137,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
     // EAW filter weights.
     const float kWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
+    const float alpha_depth = center_d * g_constants.stride * g_constants.depth_sigma;
 
     // Filter neighbourhood.
     const int kRadius = 2;
@@ -151,16 +158,16 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             float  d = g.w;
 
             // Skip background.
-            if (d < 1e-5f)
-            {
-                continue;
-            }
+            // if (d < 1e-5f)
+            // {
+            //     continue;
+            // }
 
             // Calculate luma weight.
 #ifdef USE_VARIANCE
-            float luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
+            float luma_weight = resolve_moments ? 1.f : CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
             // Calculate EAW weight.
-            float h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
+            float h_weight = resolve_moments ? 1.f : kWeights[abs(dx)] * kWeights[abs(dy)];
 #else
             float luma_weight = 1.f;
             // Calculate EAW weight.
@@ -168,7 +175,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 #endif
 
             // Сalculate depth and normal weight
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d) * CalculateNormalWeight(center_n, n);
+            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d, alpha_depth * length(float2(dx, dy)));
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;
