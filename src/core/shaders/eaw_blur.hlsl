@@ -1,5 +1,6 @@
 
 #include "math_functions.h"
+#include "eaw_edge_stopping.h"
 #define TILE_SIZE 8
 
 struct Constants
@@ -20,24 +21,6 @@ RWTexture2D<float4> g_color : register(u0);
 RWTexture2D<float4> g_gbuffer : register(u1);
 RWTexture2D<float4> g_moments : register(u2);
 RWTexture2D<float4> g_output_color : register(u3);
-
-// Edge stopping functions.
-float CalculateNormalWeight(float3 n0, float3 n1)
-{
-    return pow(max(dot(n0, n1), 0.0), g_constants.normal_sigma);
-}
-
-float CalculateDepthWeight(float dc, float dp, float alpha)
-{
-    float t = alpha == 0.f ? 0.0f : (abs(dc - dp) / alpha);
-    return exp(-t);
-}
-
-float CalculateLumaWeight(float lc, float lp, float var)
-{
-    float v = abs(lc - lp) / (g_constants.luma_sigma * sqrt(max(0.f, var + 1e-10f)));
-    return exp(-v);
-}
 
 // Get luma variance for the pixel at xy.
 // This function is either resolving variance from moments texture (first pass),
@@ -137,7 +120,9 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
     // EAW filter weights.
     const float kWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
-    const float alpha_depth = center_d * g_constants.stride * g_constants.depth_sigma;
+    const float s_depth = center_d * g_constants.stride * g_constants.depth_sigma;
+    const float s_normal = g_constants.normal_sigma;
+    const float s_luma = g_constants.luma_sigma * sqrt(max(0.f, center_variance + EPS));
 
     // Filter neighbourhood.
     const int kRadius = 2;
@@ -158,14 +143,15 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             float  d = g.w;
 
             // Skip background.
-            // if (d < 1e-5f)
-            // {
-            //     continue;
-            // }
+            if (d < 1e-5f)
+            {
+                continue;
+            }
 
             // Calculate luma weight.
 #ifdef USE_VARIANCE
-            float luma_weight = resolve_moments ? 1.f : CalculateLumaWeight(luminance(center_color), luminance(c), center_variance);
+            float luma_weight = resolve_moments ? 1.f :
+                                CalculateLumaWeight(luminance(center_color), luminance(c), s_luma);
             // Calculate EAW weight.
             float h_weight = resolve_moments ? 1.f : kWeights[abs(dx)] * kWeights[abs(dy)];
 #else
@@ -175,7 +161,8 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 #endif
 
             // Сalculate depth and normal weight
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d, alpha_depth * length(float2(dx, dy)));
+            float weight = CalculateNormalWeight(center_n, n, s_normal) * 
+                           CalculateDepthWeight(center_d, d, s_depth * length(float2(dx, dy)));
 
             // Filter color and variance.
             filtered_color += weight * h_weight * luma_weight * c;

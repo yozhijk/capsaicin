@@ -371,7 +371,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         {
             float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
             float2 moment = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-            g_output_moments_history[int2(this_frame_xy)] = float4(lerp(moment, moments_history.xy, alpha), 0.f, history_length + 1);
+            g_output_moments_history[int2(this_frame_xy)] = float4(moment, 0.f, history_length + 1);
         }
 #endif
     }

@@ -21,8 +21,8 @@ struct GPUSceneData
 
 struct RaytracingOptions
 {
-    bool lowres_indirect  = true;
-    bool use_variance     = false;
+    bool lowres_indirect  = false;
+    bool use_variance     = true;
     bool gbuffer_feedback = true;
 };
 
