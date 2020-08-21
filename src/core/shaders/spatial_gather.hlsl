@@ -1,5 +1,7 @@
 
 #include "math_functions.h"
+#include "eaw_edge_stopping.h"
+
 #define TILE_SIZE 8
 
 struct Constants
@@ -8,6 +10,11 @@ struct Constants
     uint height;
     uint frame_count;
     uint stride;
+
+    float normal_sigma;
+    float depth_sigma;
+    float luma_sigma;
+    float padding;
 };
 
 ConstantBuffer<Constants> g_constants : register(b0);
@@ -17,18 +24,6 @@ RWTexture2D<float4> g_output_color : register(u2);
 Texture2D<float4> g_blue_noise: register(t0);
 
 #include "sampling.h"
-
-float CalculateNormalWeight(float3 n0, float3 n1)
-{
-    const float kNormalSigma = 64.f;
-    return pow(max(dot(n0, n1), 0.0), kNormalSigma);
-}
-
-float CalculateDepthWeight(float d0, float d1)
-{
-    const float kDepthSigma = 3.f;
-    return Gaussian(abs(d0 - d1), 0.f, kDepthSigma);
-}
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void Gather(in uint2 gidx: SV_DispatchThreadID,
@@ -57,7 +52,7 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
     float3 center_n = OctDecode(center_g.xy);
     float  center_d = center_g.w;
     float3 center_color = g_color[gidx].xyz;
-
+    
     // Handle background.
     if (center_d < 1e-5f)
     {
@@ -65,45 +60,9 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
         return;
     }
 
-    // const uint kNumSamples = 16;
-    // const uint kScale = 32;
-
-    // for (uint si = 0; si < kNumSamples; ++si)
-    // {
-    //     float2 s = Sample2D_BlueNoise4x4(g_blue_noise,
-    //                                   fullres_center_xy,
-    //                                   g_constants.frame_count / kNumSamples + si) - 0.5f;
-    //     s *= kScale;
-
-    //     int2 xy = int2(gidx) + int2(s);
-
-    //     if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
-    //     {
-    //         continue;
-    //     }
-
-    //     uint2 fullres_xy = (xy << 1) + sp_offset;
-
-    //     float3 c = g_color[xy].xyz;
-    //     float4 g = g_gbuffer.Load(int3(fullres_xy, 0));
-    //     float3 n = OctDecode(g.xy);
-    //     float  d = g.w;
-
-    //     // Skip background.
-    //     if (d < 1e-5f)
-    //     {
-    //         continue;
-    //     }
-
-    //     float weight = Gaussian(length(s), 0.f, 3.f);
-    //     weight *= CalculateNormalWeight(center_n, n);
-    //     weight *= CalculateDepthWeight(center_d, d);
-
-
-    //     filtered_color += weight * c;
-    //     total_weight += weight;
-    // }
- 
+    const float s_depth = center_d * g_constants.depth_sigma;
+    const float s_normal = g_constants.normal_sigma;
+    const float s_luma = g_constants.luma_sigma;
 
     // Filter neighbourhood.
     const int kRadius = 3;
@@ -135,7 +94,9 @@ void Gather(in uint2 gidx: SV_DispatchThreadID,
                 continue;
             }
 
-            float weight = CalculateNormalWeight(center_n, n) * CalculateDepthWeight(center_d, d);
+            float weight = CalculateNormalWeight(center_n, n, s_normal) *
+                           CalculateDepthWeight(center_d, d, s_depth * length(float2(dx, dy))) * 
+                           CalculateLumaWeight(luminance(center_color), luminance(c), s_luma);
 
             filtered_color += weight * c;
             total_weight += weight;

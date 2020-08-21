@@ -21,8 +21,8 @@ struct GPUSceneData
 
 struct RaytracingOptions
 {
-    bool lowres_indirect  = true;
-    bool use_variance     = false;
+    bool lowres_indirect  = false;
+    bool use_variance     = true;
     bool gbuffer_feedback = true;
 };
 
@@ -165,6 +165,8 @@ private:
 
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
+    // 
+    ComPtr<ID3D12PipelineState> deaw_pipeline_state_ = nullptr;
 
     ComPtr<ID3D12RootSignature> sg_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> sg_pipeline_state_ = nullptr;
