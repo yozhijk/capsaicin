@@ -165,6 +165,8 @@ private:
 
     ComPtr<ID3D12RootSignature> eaw_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> eaw_pipeline_state_ = nullptr;
+    // 
+    ComPtr<ID3D12PipelineState> deaw_pipeline_state_ = nullptr;
 
     ComPtr<ID3D12RootSignature> sg_root_signature_ = nullptr;
     ComPtr<ID3D12PipelineState> sg_pipeline_state_ = nullptr;

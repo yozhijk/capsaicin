@@ -65,40 +65,6 @@ float3 ResampleBicubic(in RWTexture2D<float4> texture, in float2 uv, in uint2 di
     return tw > 1e-5f ? (filtered / tw) : 0.f;
 }
 
-// Resampling function is using blue-noise sample positions from previous frame.
-float3 ResampleGaussian(in RWTexture2D<float4> texture,
-                        in float2 texture_uv, // Original floating point coordinates
-                        in uint2 texture_dim,
-                        in float2 uv)
-{
-    float3 filtered = float3(0.f, 0.f, 0.f);
-    float2 center_xy = UVtoXY(texture_uv, texture_dim);
-    float2 eval_xy = UVtoXY(uv, texture_dim);
-    float tw = 0.f;
-
-    // 3x3 bicubic filter.
-    for (int i = -1; i <= 1; i++)
-        for (int j = -1; j <= 1; j++)
-        {
-            float2 current_xy = center_xy + float2(i, j);
-
-            bool offscreen = any(current_xy < 0.f) || any(current_xy >= texture_dim);
-
-            if (!offscreen)
-            {
-                float3 value =  texture[int2(current_xy)];
-
-                float2 d = abs(current_xy - eval_xy);
-                float w = Gaussian(d, 0.f, 2.f);
-
-                filtered += w * value;
-                tw += w;
-            }
-        }
-
-    return tw > 1e-5f ? (filtered / tw) : 0.f;
-}
-
 float3 SampleHistory(in float2 uv, in uint2 dim)
 {
     return ResampleBicubic(g_color_history, uv, dim);
@@ -108,7 +74,7 @@ uint GetHistoryLength(in float2 uv, in uint2 dim)
 {
     float2 xy = UVtoXY(uv, dim);
     uint2 uxy = uint2(floor(xy));
-    return g_color_history[uxy].w;
+    return g_moments_history[uxy].w;
 }
 
 float3 SampleColor(in float2 uv, in uint2 dim)
@@ -279,11 +245,10 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
     // Background.
     if (gbuffer_data.w < 1e-5f)
     {
-        g_output_color_history[int2(this_frame_xy)] = float4(SampleColorPoint(this_frame_uv, input_buffer_size), 1.f);
-#ifdef CALCULATE_VARIANCE
-        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-        g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
-#endif
+        float3 color = SampleColor(this_frame_uv, input_buffer_size);
+        float2 moments = float2(luminance(color), luminance(color) * luminance(color));
+        g_output_color_history[int2(this_frame_xy)] = float4(color, 0.f);
+        g_output_moments_history[int2(this_frame_xy)] = float4(moments, 0.f, 1.f);
         return;
     }
 
@@ -300,15 +265,12 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
     if (disocclusion)
     {
-        // In case of a disocclusion, do bilateral resampling for color
-        // and estimate spatial luma moments, instead of temporal.
+        // In case of a disocclusion, do bilateral resampling for color.
         float3 color = SampleColor(this_frame_uv, input_buffer_size);
-        g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
-
-#ifdef CALCULATE_VARIANCE
-        float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-        g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
-#endif
+        float2 moments = float2(luminance(color), luminance(color) * luminance(color));
+        g_output_color_history[int2(this_frame_xy)] = float4(color, 0.f);
+        g_output_moments_history[int2(this_frame_xy)] = float4(moments, 0.f, 1.f);
+        return;
     }
     else
     {
@@ -321,24 +283,19 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
 
         if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.05)
         {
-            // In case of a disocclusion, do bilateral resampling for color
-            // and estimate spatial luma moments, instead of temporal.
             float3 color = SampleColor(this_frame_uv, input_buffer_size);
-            g_output_color_history[int2(this_frame_xy)] = float4(color, 1.f);
-
-#ifdef CALCULATE_VARIANCE
-            float2 luma_moments = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-            g_output_moments_history[int2(this_frame_xy)] = float4(luma_moments, 0.f, 1.f);
-#endif
+            float2 moments = float2(luminance(color), luminance(color) * luminance(color));
+            g_output_color_history[int2(this_frame_xy)] = float4(color, 0.f);
+            g_output_moments_history[int2(this_frame_xy)] = float4(moments, 0.f, 1.f);
             return;
         }
 
         float alpha = g_constants.alpha;
-
         // Fetch history and moments history.
         float3 history = SampleHistory(prev_frame_uv, frame_buffer_size);
         // Prepare current frame data.
-        float3 color = SampleColorPoint(this_frame_uv, input_buffer_size);
+        float3 color = SampleColor(this_frame_uv, input_buffer_size);
+
         uint history_length = GetHistoryLength(prev_frame_uv, frame_buffer_size);
 
         if (history_length < kMaxHistoryLength)
@@ -355,25 +312,15 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         }
 #endif
 
-        // Perform history blend.
-        g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), history_length + 1);
+        float   variance = 0.0;
+        float4  moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
+        float2  moments = lerp(float2(luminance(color), luminance(color) * luminance(color)), moments_history.xy, alpha);
 
-#ifdef CALCULATE_VARIANCE
-        if (history_length > 8)
-        {
-            float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
-            // float2 luma_moments_spatial = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-            float luma = luminance(color);
-            float4 moment = float4(luma, luma * luma, 0.f, 1.f);
-            g_output_moments_history[int2(this_frame_xy)] = float4(lerp(moment, moments_history, alpha).xyz, history_length + 1);
-        }
-        else
-        {
-            float4 moments_history = SampleMomentsHistory(prev_frame_uv, frame_buffer_size);
-            float2 moment = CalculateLumaMomentsSpatial(this_frame_uv, input_buffer_size);
-            g_output_moments_history[int2(this_frame_xy)] = float4(moment, 0.f, history_length + 1);
-        }
-#endif
+        variance = abs(moments.y - moments.x * moments.x);
+
+        // Perform history blend.
+        g_output_moments_history[int2(this_frame_xy)] = float4(moments, 0.f, history_length + 1);
+        g_output_color_history[int2(this_frame_xy)] = float4(lerp(color, history, alpha), variance);
     }
 }
 

@@ -22,62 +22,24 @@ RWTexture2D<float4> g_gbuffer : register(u1);
 RWTexture2D<float4> g_moments : register(u2);
 RWTexture2D<float4> g_output_color : register(u3);
 
-// Get luma variance for the pixel at xy.
-// This function is either resolving variance from moments texture (first pass),
-// or fetches it from 4th component of a color image (subsequent passes).
-float SampleVariance(in uint2 xy, bool resolve)
+float SampleVariance(in uint2 xy)
 {
-    if (resolve)
-    {
-        float4 moments = g_moments[xy];
-
-        // Variance boost.
-        float boost = max(1.f, 16.f / moments.w);
-        return boost * abs(moments.y - moments.x * moments.x);
-    }
-    else
-    {
-        return g_color[xy].w;
-    }
-}
-
-// Resample variance using 3x3 Gaussian kernel as per SVGF paper.
-float RasampleVariance(in uint2 xy, bool resolve)
-{
-    float filtered_variance = 0.f;
-    float total_weight = 0.f;
-
-    const float kWeights[2][2] = {
-        { 1.0 / 4.0, 1.0 / 8.0  },
-        { 1.0 / 8.0, 1.0 / 16.0 }
-    };
-
-    const int kRadius = 1;
-    for (int dy = -kRadius; dy <= kRadius; ++dy)
-    {
-        for (int dx = -kRadius; dx <= kRadius; ++dx)
-        {
-            int2 sxy = int2(xy) + int2(dx, dy);
-
-            if (any(sxy < 0) || any(sxy > int2(g_constants.width - 1, g_constants.height - 1)))
-            {
-                continue;
-            }
-
-            float variance = SampleVariance(sxy, resolve);
-            float weight = kWeights[abs(dx)][abs(dy)];
-
-            filtered_variance += weight * variance;
-            total_weight += weight;
-        }
-    }
-
-    return total_weight > 0.f ? (filtered_variance / total_weight) : 0.f;
+    return g_color[xy].w;
 }
 
 float3 SampleColorRemoveFireflies(in uint2 xy)
 {
     return min(g_color[xy].xyz, 10.f);
+}
+
+float GetHistoryLength(in uint2 xy)
+{
+    return g_moments[xy].w;
+}
+
+float2 GetMoments(in uint2 xy)
+{
+    return g_moments[xy].xy;
 }
 
 // Edge-avoding a-trous wavelet blur with edge stoping functions, part of
@@ -92,23 +54,20 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
         return;
 
     // TODO: remove this dirty hack.
-    bool resolve_moments = g_constants.stride == 1;
-    float history_length = g_moments[gidx].w;
+    float   history_length = GetHistoryLength(gidx);
+    float3  filtered_color = 0.f;
+    float   filtered_variance = 0.f;
+    float   total_weight = 0.f;
+    float   total_variance_weight = 0.f;
 
-    float3 filtered_color = 0.f;
-    float filtered_variance = 0.f;
-    float total_weight = 0.f;
-    float total_variance_weight = 0.f;
+    float4  center_g = g_gbuffer.Load(int3(gidx, 0));
+    float3  center_n = OctDecode(center_g.xy);
+    float   center_d = center_g.w;
+    float3  center_color = SampleColorRemoveFireflies(gidx);
+    float   center_variance = 0.f;
 
-    float4 center_g = g_gbuffer.Load(int3(gidx, 0));
-    float3 center_n = OctDecode(center_g.xy);
-    float  center_d = center_g.w;
-    float3 center_color = SampleColorRemoveFireflies(gidx);
-    
 #ifdef USE_VARIANCE
-    float center_variance = RasampleVariance(gidx, resolve_moments);
-#else
-    float center_variance = 0.f;
+    center_variance = SampleVariance(gidx);
 #endif
 
     // Handle background.
@@ -141,6 +100,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             float4 g = g_gbuffer.Load(int3(xy, 0));
             float3 n = OctDecode(g.xy);
             float  d = g.w;
+            float  v = SampleVariance(xy);
 
             // Skip background.
             if (d < 1e-5f)
@@ -149,17 +109,14 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             }
 
             // Calculate luma weight.
-#ifdef USE_VARIANCE
-            float luma_weight = resolve_moments ? 1.f :
-                                CalculateLumaWeight(luminance(center_color), luminance(c), s_luma);
-            // Calculate EAW weight.
-            float h_weight = resolve_moments ? 1.f : kWeights[abs(dx)] * kWeights[abs(dy)];
-#else
             float luma_weight = 1.f;
             // Calculate EAW weight.
             float h_weight = 1.f;
+#ifdef USE_VARIANCE
+            luma_weight = CalculateLumaWeight(luminance(center_color), luminance(c), s_luma);
+            // Calculate EAW weight.
+            h_weight = kWeights[abs(dx)] * kWeights[abs(dy)];
 #endif
-
             // Сalculate depth and normal weight
             float weight = CalculateNormalWeight(center_n, n, s_normal) * 
                            CalculateDepthWeight(center_d, d, s_depth * length(float2(dx, dy)));
@@ -170,7 +127,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
 #ifdef USE_VARIANCE
             total_variance_weight += h_weight * h_weight * weight * weight * luma_weight * luma_weight;
-            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
+            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * v;
 #endif
         }
     }
@@ -178,5 +135,91 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
     // Output filtered color and variance.
     center_color = (total_weight < EPS) ? center_color : (filtered_color / total_weight);
     center_variance =  (total_variance_weight < EPS) ? center_variance : (filtered_variance / total_variance_weight);
+    g_output_color[gidx] = float4(center_color, center_variance);
+}
+
+#define SPATIAL_VARIANCE_ESTIMATE_THRESHOLD 8
+
+// This pass effectively blurs disoccluded areas and recalculates variance based on spatial estimate there.
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void BlurDisocclusion(in uint2 gidx: SV_DispatchThreadID,
+                      in uint2 lidx: SV_GroupThreadID,
+                      in uint2 bidx: SV_GroupID)
+{
+    if (gidx.x >= g_constants.width || gidx.y >= g_constants.height)
+        return;
+
+    float   history_length = GetHistoryLength(gidx);
+    float3  filtered_color = 0.f;
+    float2  filtered_moments = 0.f;
+    float   total_weight = 0.f;
+
+    float4  center_g = g_gbuffer.Load(int3(gidx, 0));
+    float3  center_n = OctDecode(center_g.xy);
+    float   center_d = center_g.w;
+    float3  center_color = SampleColorRemoveFireflies(gidx);
+    float2  center_m = 0.f;
+    float   center_variance = 0.f;
+
+#ifdef USE_VARIANCE
+    center_m = GetMoments(gidx);
+    center_variance = SampleVariance(gidx);
+#endif
+
+    if (center_d < 1e-5f || history_length >= SPATIAL_VARIANCE_ESTIMATE_THRESHOLD)
+    {
+        g_output_color[gidx] = float4(center_color, center_variance);
+        return;
+    }
+
+    // EAW filter weights.
+    const float s_depth = center_d * g_constants.depth_sigma;
+    const float s_normal = g_constants.normal_sigma;
+    const float s_luma = g_constants.luma_sigma;
+
+    // Filter neighbourhood.
+    const int kRadius = 3;
+    for (int dy = -kRadius; dy <= kRadius; ++dy)
+    {
+        for (int dx = -kRadius; dx <= kRadius; ++dx)
+        {
+            int2 xy = int2(gidx) + int2(dx, dy);
+
+            if (any(xy < 0) || any(xy >= int2(g_constants.width, g_constants.height)))
+            {
+                continue;
+            }
+
+            float3 c = SampleColorRemoveFireflies(xy);
+            float4 g = g_gbuffer.Load(int3(xy, 0));
+            float3 n = OctDecode(g.xy);
+            float  d = g.w;
+            float2 m = GetMoments(xy);
+
+            // Skip background.
+            if (d < 1e-5f)
+            {
+                continue;
+            }
+
+            // Сalculate depth and normal weight
+            float weight = CalculateNormalWeight(center_n, n, s_normal) * 
+                           CalculateDepthWeight(center_d, d, s_depth * length(float2(dx, dy))) * 
+                           CalculateLumaWeight(luminance(center_color), luminance(c), s_luma);
+
+            // Filter color and variance.
+            filtered_color += weight * c;
+            filtered_moments += weight * m;
+            total_weight += weight;
+        }
+    }
+
+    // Output filtered color and variance.
+    center_color = (total_weight < EPS) ? center_color : (filtered_color / total_weight);
+    center_m =  (total_weight < EPS) ? 0.f : (filtered_moments / total_weight);
+
+    float variance_boost = SPATIAL_VARIANCE_ESTIMATE_THRESHOLD / history_length;
+
+    center_variance = variance_boost * abs(center_m.y - center_m.x * center_m.x);
     g_output_color[gidx] = float4(center_color, center_variance);
 }

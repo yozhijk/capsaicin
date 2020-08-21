@@ -672,10 +672,21 @@ void RaytracingSystem::InitEAWDenoisePipeline()
         defines.push_back("USE_VARIANCE");
     }
 
-    auto shader = ShaderCompiler::instance().CompileFromFile(
-        "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur", defines);
+    {
+        auto shader = ShaderCompiler::instance().CompileFromFile(
+            "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur", defines);
 
-    eaw_pipeline_state_ = dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+        eaw_pipeline_state_ =
+            dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+    }
+
+    {
+        auto shader = ShaderCompiler::instance().CompileFromFile(
+            "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "BlurDisocclusion", defines);
+
+        deaw_pipeline_state_ =
+            dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+    }
 }
 
 void RaytracingSystem::InitCombinePipeline()
@@ -715,7 +726,8 @@ void RaytracingSystem::InitSpatialGatherPipeline()
 
         CD3DX12_ROOT_PARAMETER
         root_entries[SpatialGatherRootSignature::kNumEntries] = {};
-        root_entries[SpatialGatherRootSignature::kConstants].InitAsConstants(sizeof(EAWConstants), 0);
+        root_entries[SpatialGatherRootSignature::kConstants].InitAsConstants(sizeof(EAWConstants),
+                                                                             0);
         root_entries[SpatialGatherRootSignature::kOutput].InitAsDescriptorTable(
             1, &output_descriptor_range);
         root_entries[SpatialGatherRootSignature::kBlueNoise].InitAsDescriptorTable(
@@ -1450,7 +1462,8 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         ID3D12DescriptorHeap* desc_heaps[] = {descriptor_heap};
         eaw_command_list_->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
         eaw_command_list_->SetComputeRootSignature(eaw_root_signature_.Get());
-        eaw_command_list_->SetPipelineState(eaw_pipeline_state_.Get());
+
+        eaw_command_list_->SetPipelineState(deaw_pipeline_state_.Get());
         eaw_command_list_->SetComputeRoot32BitConstants(
             EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         eaw_command_list_->SetComputeRootDescriptorTable(
@@ -1461,17 +1474,18 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
 
-        constants.stride = 3;
+        eaw_command_list_->SetPipelineState(eaw_pipeline_state_.Get());
         eaw_command_list_->SetComputeRoot32BitConstants(
             EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         eaw_command_list_->SetComputeRootDescriptorTable(
             EAWDenoisingRootSignature::kOutput,
             render_system.GetDescriptorHandleGPU(descriptor_table + 4));
+
         eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
 
-        constants.stride = 5;
+        constants.stride = 3;
         eaw_command_list_->SetComputeRoot32BitConstants(
             EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         eaw_command_list_->SetComputeRootDescriptorTable(
@@ -1483,7 +1497,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
 
         if (settings.eaw5)
         {
-            constants.stride = 7;
+            constants.stride = 5;
             eaw_command_list_->SetComputeRoot32BitConstants(
                 EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
             eaw_command_list_->SetComputeRootDescriptorTable(
@@ -1494,7 +1508,7 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
             eaw_command_list_->ResourceBarrier(
                 1, &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
 
-            constants.stride = 9;
+            constants.stride = 7;
             eaw_command_list_->SetComputeRoot32BitConstants(
                 EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
             eaw_command_list_->SetComputeRootDescriptorTable(
