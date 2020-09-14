@@ -30,7 +30,7 @@ enable_doxygen()
 include(cmake/StaticAnalyzers.cmake)
 
 option(BUILD_SHARED_LIBS "Enable compilation of shared libraries" OFF)
-option(ENABLE_TESTING "Enable Test Builds" OFF)
+option(ENABLE_TESTING "Enable Test Builds" ON)
 
 # Very basic PCH example
 option(ENABLE_PCH "Enable Precompiled Headers" OFF)
@@ -43,11 +43,17 @@ if (ENABLE_PCH)
 endif()
 
 if(ENABLE_TESTING)
-  enable_testing()
-  message(
-    "Building Tests. Be sure to check out test/constexpr_tests for constexpr testing"
-  )
-  add_subdirectory(test)
+    set(gtest_force_shared_crt ON CACHE BOOL "Use /MD and /MDd" FORCE)
+    add_subdirectory(third_party/gtest)
+    set(THIRD_PARTY_TARGETS
+        gtest
+        gtest_main
+        gmock
+        gmock_main)
+
+    foreach(TGT ${THIRD_PARTY_TARGETS})
+        set_property(TARGET ${TGT} PROPERTY FOLDER "third_party")
+    endforeach()
 endif()
 
 if(ENABLE_FUZZING)
