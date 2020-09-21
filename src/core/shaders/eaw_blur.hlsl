@@ -175,7 +175,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             total_weight += weight * h_weight * luma_weight;
 
 #ifdef USE_VARIANCE
-            total_variance_weight += h_weight * h_weight * weight * weight * luma_weight * luma_weight;
+            //total_variance_weight += h_weight * h_weight * weight * weight * luma_weight * luma_weight;
             filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
 #endif
         }
@@ -183,6 +183,6 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
 
     // Output filtered color and variance.
     center_color = (total_weight < EPS) ? center_color : (filtered_color / total_weight);
-    center_variance =  (total_variance_weight < EPS) ? center_variance : (filtered_variance / total_variance_weight);
+    center_variance =  (total_variance_weight < EPS) ? center_variance : (filtered_variance / (total_weight * total_weight));
     g_output_color[gidx] = float4(center_color, center_variance);
 }

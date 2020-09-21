@@ -316,7 +316,7 @@ void Accumulate(in uint2 gidx: SV_DispatchThreadID,
         float2 prev_frame_xy = UVtoXY(prev_frame_uv, frame_buffer_size);
         float4 prev_gbuffer_data = g_prev_gbuffer.Load(int3(prev_frame_xy, 0));
 
-        float current_closest_depth = CalculateClosestDepth(g_gbuffer, this_frame_xy, frame_buffer_size);
+        float current_closest_depth = length(hit_position - g_prev_camera.position);//CalculateClosestDepth(g_gbuffer, this_frame_xy, frame_buffer_size);
         float prev_closest_depth = CalculateClosestDepth(g_prev_gbuffer, prev_frame_xy, frame_buffer_size);
 
         if (abs(prev_closest_depth - current_closest_depth) / current_closest_depth > 0.05)
