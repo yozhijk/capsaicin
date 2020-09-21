@@ -76,7 +76,7 @@ void GUISystem::RenderGUI(SettingsComponent& settings)
     ImGui::Checkbox("EAW 5 stages", &settings.eaw5);
     ImGui::Text("EAW parameters");
     ImGui::SliderFloat("Normal sigma", &settings.eaw_normal_sigma, 32.f, 256.f);
-    ImGui::SliderFloat("Depth sigma", &settings.eaw_depth_sigma, 0.1f, 2.f);
+    ImGui::SliderFloat("Depth sigma", &settings.eaw_depth_sigma, 0.1f, 10.f);
     ImGui::SliderFloat("Luminance sigma", &settings.eaw_luma_sigma, 0.1f, 5.f);
     ImGui::Separator();
     ImGui::Checkbox("Enable spatial gather", &settings.gather);

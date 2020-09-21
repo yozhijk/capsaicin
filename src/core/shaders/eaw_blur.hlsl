@@ -125,7 +125,7 @@ void Blur(in uint2 gidx: SV_DispatchThreadID,
             total_weight += weight * h_weight * luma_weight;
 
 #ifdef USE_VARIANCE
-            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy, resolve_moments);
+            filtered_variance += h_weight * h_weight * weight * weight * luma_weight * luma_weight * SampleVariance(xy);
 #endif
         }
     }

@@ -25,8 +25,8 @@ struct SettingsComponent
     bool eaw5    = true;
 
     float eaw_normal_sigma = 128.f;
-    float eaw_depth_sigma  = 1.f;
-    float eaw_luma_sigma   = 1.f;
+    float eaw_depth_sigma  = 3.f;
+    float eaw_luma_sigma   = 3.f;
 
     float gather_normal_sigma = 64.f;
     float gather_depth_sigma  = 2.f;
