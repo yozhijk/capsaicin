@@ -1,5 +1,5 @@
 # capsaicin
-Experimental game rendering engine fully based on ray tracing / path tracing.
+Experimental rendering engine fully based on ray tracing / path tracing.
 
 ## Build status
 [![Build Status](https://travis-ci.org/yozhijk/capsaicin.svg?branch=master)](https://travis-ci.org/yozhijk/capsaicin)

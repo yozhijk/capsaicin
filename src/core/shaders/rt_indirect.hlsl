@@ -162,7 +162,7 @@ void CalculateIndirectDiffuseLighting()
             break;
         }
 
-        throughput *= (ss.brdf * abs(dot(n, ss.direction)) / ss.pdf);
+        throughput *= (ss.brdf * max(dot(n, ss.direction), 0.f) / ss.pdf);
 
         if (bounce != 0)
         {

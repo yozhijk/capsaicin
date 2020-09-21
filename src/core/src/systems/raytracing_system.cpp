@@ -672,10 +672,21 @@ void RaytracingSystem::InitEAWDenoisePipeline()
         defines.push_back("USE_VARIANCE");
     }
 
-    auto shader = ShaderCompiler::instance().CompileFromFile(
-        "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur", defines);
+    {
+        auto shader = ShaderCompiler::instance().CompileFromFile(
+            "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "Blur", defines);
 
-    eaw_pipeline_state_ = dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+        eaw_pipeline_state_ =
+            dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+    }
+
+    {
+        auto shader = ShaderCompiler::instance().CompileFromFile(
+            "../../../src/core/shaders/eaw_blur.hlsl", "cs_6_3", "BlurDisocclusion", defines);
+
+        deaw_pipeline_state_ =
+            dx12api().CreateComputePipelineState(shader, eaw_root_signature_.Get());
+    }
 }
 
 void RaytracingSystem::InitCombinePipeline()
@@ -715,7 +726,8 @@ void RaytracingSystem::InitSpatialGatherPipeline()
 
         CD3DX12_ROOT_PARAMETER
         root_entries[SpatialGatherRootSignature::kNumEntries] = {};
-        root_entries[SpatialGatherRootSignature::kConstants].InitAsConstants(sizeof(Constants), 0);
+        root_entries[SpatialGatherRootSignature::kConstants].InitAsConstants(sizeof(EAWConstants),
+                                                                             0);
         root_entries[SpatialGatherRootSignature::kOutput].InitAsDescriptorTable(
             1, &output_descriptor_range);
         root_entries[SpatialGatherRootSignature::kBlueNoise].InitAsDescriptorTable(
@@ -1436,9 +1448,9 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
                            render_system.window_height(),
                            render_system.frame_count(),
                            1,
-                           settings.normal_sigma,
-                           settings.depth_sigma,
-                           settings.luma_sigma,
+                           settings.eaw_normal_sigma,
+                           settings.eaw_depth_sigma,
+                           settings.eaw_luma_sigma,
                            0.f};
 
     eaw_command_list_->Reset(command_allocator, nullptr);
@@ -1450,7 +1462,8 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         ID3D12DescriptorHeap* desc_heaps[] = {descriptor_heap};
         eaw_command_list_->SetDescriptorHeaps(ARRAYSIZE(desc_heaps), desc_heaps);
         eaw_command_list_->SetComputeRootSignature(eaw_root_signature_.Get());
-        eaw_command_list_->SetPipelineState(eaw_pipeline_state_.Get());
+
+        eaw_command_list_->SetPipelineState(deaw_pipeline_state_.Get());
         eaw_command_list_->SetComputeRoot32BitConstants(
             EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         eaw_command_list_->SetComputeRootDescriptorTable(
@@ -1461,45 +1474,51 @@ void RaytracingSystem::Denoise(uint32_t descriptor_table, const SettingsComponen
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
 
+        eaw_command_list_->SetPipelineState(eaw_pipeline_state_.Get());
+        eaw_command_list_->SetComputeRoot32BitConstants(
+            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+        eaw_command_list_->SetComputeRootDescriptorTable(
+            EAWDenoisingRootSignature::kOutput,
+            render_system.GetDescriptorHandleGPU(descriptor_table + 4));
+
+        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+        eaw_command_list_->ResourceBarrier(1,
+                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
+
         constants.stride = 3;
         eaw_command_list_->SetComputeRoot32BitConstants(
             EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         eaw_command_list_->SetComputeRootDescriptorTable(
             EAWDenoisingRootSignature::kOutput,
-            render_system.GetDescriptorHandleGPU(descriptor_table + 4));
-        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        eaw_command_list_->ResourceBarrier(1,
-                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
-
-        constants.stride = 5;
-        eaw_command_list_->SetComputeRoot32BitConstants(
-            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        eaw_command_list_->SetComputeRootDescriptorTable(
-            EAWDenoisingRootSignature::kOutput,
             render_system.GetDescriptorHandleGPU(descriptor_table + 8));
         eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
         eaw_command_list_->ResourceBarrier(1,
                                            &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
 
-        constants.stride = 7;
-        eaw_command_list_->SetComputeRoot32BitConstants(
-            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        eaw_command_list_->SetComputeRootDescriptorTable(
-            EAWDenoisingRootSignature::kOutput,
-            render_system.GetDescriptorHandleGPU(descriptor_table + 4));
-        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        eaw_command_list_->ResourceBarrier(1,
-                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
+        if (settings.eaw5)
+        {
+            constants.stride = 5;
+            eaw_command_list_->SetComputeRoot32BitConstants(
+                EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+            eaw_command_list_->SetComputeRootDescriptorTable(
+                EAWDenoisingRootSignature::kOutput,
+                render_system.GetDescriptorHandleGPU(descriptor_table + 4));
+            eaw_command_list_->Dispatch(
+                ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+            eaw_command_list_->ResourceBarrier(
+                1, &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[1].Get()));
 
-        constants.stride = 9;
-        eaw_command_list_->SetComputeRoot32BitConstants(
-            EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
-        eaw_command_list_->SetComputeRootDescriptorTable(
-            EAWDenoisingRootSignature::kOutput,
-            render_system.GetDescriptorHandleGPU(descriptor_table + 8));
-        eaw_command_list_->Dispatch(ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
-        eaw_command_list_->ResourceBarrier(1,
-                                           &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
+            constants.stride = 7;
+            eaw_command_list_->SetComputeRoot32BitConstants(
+                EAWDenoisingRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
+            eaw_command_list_->SetComputeRootDescriptorTable(
+                EAWDenoisingRootSignature::kOutput,
+                render_system.GetDescriptorHandleGPU(descriptor_table + 8));
+            eaw_command_list_->Dispatch(
+                ceil_divide(window_width, 8), ceil_divide(window_height, 8), 1);
+            eaw_command_list_->ResourceBarrier(
+                1, &CD3DX12_RESOURCE_BARRIER::UAV(output_temp_[0].Get()));
+        }
     }
     else
     {
@@ -1539,7 +1558,14 @@ void RaytracingSystem::SpatialGather(uint32_t                 descriptor_table,
     auto [start_time_index, end_time_index] =
         render_system.AllocateTimestampQueryPair("Spatial gather");
 
-    Constants constants{width, height, render_system.frame_count(), 1};
+    EAWConstants constants{render_system.window_width(),
+                           render_system.window_height(),
+                           render_system.frame_count(),
+                           1,
+                           settings.gather_normal_sigma,
+                           settings.gather_depth_sigma,
+                           settings.gather_luma_sigma,
+                           0.f};
 
     sg_command_list_->Reset(command_allocator, nullptr);
     sg_command_list_->EndQuery(timestamp_query_heap, D3D12_QUERY_TYPE_TIMESTAMP, start_time_index);
@@ -1551,7 +1577,7 @@ void RaytracingSystem::SpatialGather(uint32_t                 descriptor_table,
         sg_command_list_->SetComputeRootSignature(sg_root_signature_.Get());
         sg_command_list_->SetPipelineState(sg_pipeline_state_.Get());
         sg_command_list_->SetComputeRoot32BitConstants(
-            SpatialGatherRootSignature::kConstants, sizeof(Constants) >> 2, &constants, 0);
+            SpatialGatherRootSignature::kConstants, sizeof(EAWConstants) >> 2, &constants, 0);
         sg_command_list_->SetComputeRootDescriptorTable(
             SpatialGatherRootSignature::kOutput,
             render_system.GetDescriptorHandleGPU(descriptor_table));
